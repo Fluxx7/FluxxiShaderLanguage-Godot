@@ -215,7 +215,34 @@ install command/zip name in the READMEs if you mention them.
 
 ---
 
-## 5. Other maintenance
+## 5. The file icon
+
+The `.fsl` file icon is the text "FSL" (Lato Bold, `#b472ea`) baked into an SVG as
+paths — no font dependency at render time. To change the text, color, or font:
+
+```sh
+cd editors
+python3 make-icon.py --text FSL --color "#b472ea"   # needs: pip install fonttools
+```
+
+The script writes the SVG to both consumers at once:
+
+- `fsl-vscode/icons/fsl.svg` — referenced by the `icon` field of the language
+  contribution in `package.json`. Shown only when the active *file icon theme*
+  supports language icons (the default Seti theme does). `light`/`dark` can point
+  at different files if one color doesn't work on both backgrounds.
+- `fsl-rider/src/main/resources/icons/fsl.svg` — returned by
+  `FslFileIconProvider.java` (registered as a `fileIconProvider` in `plugin.xml`).
+  For a different icon in dark themes, add `icons/fsl_dark.svg`; JetBrains picks the
+  `_dark` variant automatically. Note: the provider approach (rather than registering
+  a `FileType`) is deliberate — claiming the file type would stop the TextMate bundle
+  from highlighting `.fsl` files.
+
+Then repackage/rebuild as in section 4. (Marketplace logos are separate and not set
+up: top-level `"icon"` PNG in `package.json` for VSCode, `META-INF/pluginIcon.svg`
+for JetBrains — only needed if you publish.)
+
+## 6. Other maintenance
 
 - **New file extension** (say `.fsli`): add it to `contributes.languages[0].extensions`
   in `fsl-vscode/package.json`, then rebuild both.

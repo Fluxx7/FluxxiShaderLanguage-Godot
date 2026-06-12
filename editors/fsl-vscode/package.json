@@ -34,7 +34,11 @@
         "extensions": [
           ".fsl"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/fsl.svg",
+          "dark": "./icons/fsl.svg"
+        }
       }
     ],
     "grammars": [

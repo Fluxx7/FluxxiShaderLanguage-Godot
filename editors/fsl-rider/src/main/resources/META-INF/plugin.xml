@@ -17,5 +17,6 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <textmate.bundleProvider implementation="io.github.fluxx7.fsl.FslTextMateBundleProvider"/>
+        <fileIconProvider implementation="io.github.fluxx7.fsl.FslFileIconProvider"/>
     </extensions>
 </idea-plugin>
