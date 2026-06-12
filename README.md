@@ -1,56 +1,49 @@
-# godot-cpp template
-This repository serves as a quickstart template for GDExtension development with Godot 4.0+.
+# Fluxxi Shader Language
 
-## Contents
-* Preconfigured source files for C++ development of the GDExtension ([src/](./src/))
-* An empty Godot project in [project/](./project), to test the GDExtension
-* godot-cpp as a submodule (`godot-cpp/`)
-* GitHub Issues template ([.github/ISSUE_TEMPLATE.yml](./.github/ISSUE_TEMPLATE.yml))
-* GitHub CI/CD workflows to publish your library packages when creating a release ([.github/workflows/builds.yml](./.github/workflows/builds.yml))
-* An SConstruct file with various functions, such as boilerplate for [Adding documentation](https://docs.godotengine.org/en/stable/tutorials/scripting/cpp/gdextension_docs_system.html)
+Fluxxi Shader Language (FSL) is a semi-custom compute shader language for Godot written as a GDExtension. It is based off of GLSL, and adds support for multiple kernels in one file and shader includes. Some naming conventions are also changed from GLSL (listed below). 
 
-## Usage - Template
+The FSLComputeShaderHandling library is included as well, which abstracts compilation, resource initialization/updating, compute list construction, and shader dispatch to make using compute shaders easier. Standard `.glsl` shaders are supported as well, although they cannot use all of the features without some additional code to pass information to the compute shader handler. 
 
-To use this template, log in to GitHub and click the green "Use this template" button at the top of the repository page. This will let you create a copy of this repository with a clean git history.
+# FSL features
 
-To get started with your new GDExtension, do the following:
+## Shader Language
+- Core type changes
+  - all `vec` types are renamed 
+    - `vecn` -> `floatn`
+    - `ivecn` -> `intn`
+    - `uvecn` -> `uintn`
+    - `bvecn` -> `booln`
+    - `dvecn` -> `doublen`
+  - all `mat` types are renamed
+    - `matnxm` -> `floatnxm`
+    - `dmatnxm` -> `doublenxm`
+    - Note: due to the new syntax, the shorthand `matn` syntax has been removed 
+  - literals are no longer typed, ie. `float foo = 0;` is valid
+- Added directive to include definitions in other `.fsl` files
+  - Syntax: `#include "<file path>"`
+- Added keyword to declare a kernel function
+  - Syntax: `kernel[x_threads, y_threads, z_threads] kernel_name()`
+  - Push constants for a given kernel are specified as arguments to the kernel function
+    - ie. `kernel[16, 1, 1] foo(int bar, float baz)` would declare `bar` and `baz` as push constants for the `foo` kernel
+    - Invocation/workgroup ids can have an alias declared in the kernel declaration as well
+      - Syntax: `kernel_name(id : GlobalInvocationID)`
+- All other GLSL features are supported
 
-* clone your repository to your local computer
-* initialize the godot-cpp git submodule via `git submodule update --init`
-* change the name of the compiled library file inside the [SConstruct](./SConstruct) file by modifying the `libname` string.
-  * change the paths of the to be loaded library name inside the [project/bin/example.gdextension](./project/bin/example.gdextension) file, by replacing `EXTENSION-NAME` with the name you chose for `libname`.
-* change the `entry_symbol` string inside [project/bin/example.gdextension](./project/bin/example.gdextension) file.
-  * rename the `example_library_init` function in [src/register_types.cpp](./src/register_types.cpp) to the same name you chose for `entry_symbol`.
-* change the name of the `project/bin/example.gdextension` file
+## Godot
+- Adds a new `FSLFile` class that automatically prepares valid GLSL compute shader code for Godot from a provided FSL file
 
-Now, you can build the project with the following command:
+# Editor support
 
-```shell
-scons
-```
+Syntax highlighting for `.fsl` files lives in [editors/](editors/):
+- [editors/fsl-vscode](editors/fsl-vscode) — VSCode extension (TextMate grammar; this is the single source of truth for the grammar)
+- [editors/fsl-rider](editors/fsl-rider) — Rider/JetBrains plugin that bundles the same grammar
 
-If the build command worked, you can test it with the [project](./project) project. Import it into Godot, open it, and launch the main scene. You should see it print the following line in the console:
+See each folder's README for build/install instructions, and
+[editors/MAINTAINING.md](editors/MAINTAINING.md) for how to extend the grammar and
+customize highlighting.
 
-```
-Type: 24
-```
-
-### Configuring an IDE
-You can develop your own extension with any text editor and by invoking scons on the command line, but if you want to work with an IDE (Integrated Development Environment), you can use a compilation database file called `compile_commands.json`. Most IDEs should automatically identify this file, and self-configure appropriately.
-To generate the database file, you can run one of the following commands in the project root directory:
-```shell
-# Generate compile_commands.json while compiling
-scons compiledb=yes
-
-# Generate compile_commands.json without compiling
-scons compiledb=yes compile_commands.json
-```
-
-## Usage - Actions
-
-This repository comes with continuous integration (CI) through a GitHub action that tests building the GDExtension.
-It triggers automatically for each pushed change. You can find and edit it in [builds.yml](.github/workflows/ci.yml).
-
-There is also a workflow ([make_build.yml](.github/workflows/make_build.yml)) that builds the GDExtension for all supported platforms that you can use to create releases.
-You can trigger this workflow manually from the `Actions` tab on GitHub.
-After it is complete, you can find the file `godot-cpp-template.zip` in the `Artifacts` section of the workflow run.
+# FSLComputeShaderHandling library
+## ComputeShader
+- 
+## ComputePlan
+- 

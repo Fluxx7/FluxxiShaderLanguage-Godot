@@ -1,0 +1,267 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "FSL",
+  "scopeName": "source.fsl",
+  "fileTypes": ["fsl"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#preprocessor" },
+    { "include": "#kernel-declaration" },
+    { "include": "#layout-declaration" },
+    { "include": "#keywords" },
+    { "include": "#specifiers" },
+    { "include": "#types" },
+    { "include": "#builtin-variables" },
+    { "include": "#constants" },
+    { "include": "#builtin-functions" },
+    { "include": "#function-call" },
+    { "include": "#numbers" },
+    { "include": "#strings" },
+    { "include": "#operators" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.fsl",
+          "begin": "//",
+          "beginCaptures": { "0": { "name": "punctuation.definition.comment.fsl" } },
+          "end": "$"
+        },
+        {
+          "name": "comment.block.fsl",
+          "begin": "/\\*",
+          "beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.fsl" } },
+          "end": "\\*/",
+          "endCaptures": { "0": { "name": "punctuation.definition.comment.end.fsl" } }
+        }
+      ]
+    },
+    "preprocessor": {
+      "patterns": [
+        {
+          "name": "meta.preprocessor.include.fsl",
+          "begin": "^\\s*(#)\\s*(include)\\b",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.directive.fsl" },
+            "2": { "name": "keyword.control.directive.include.fsl" }
+          },
+          "end": "(?<!\\\\)$",
+          "patterns": [
+            {
+              "name": "string.quoted.double.include.fsl",
+              "begin": "\"",
+              "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.fsl" } },
+              "end": "\"",
+              "endCaptures": { "0": { "name": "punctuation.definition.string.end.fsl" } }
+            },
+            { "include": "#comments" }
+          ]
+        },
+        {
+          "name": "meta.preprocessor.macro.fsl",
+          "begin": "^\\s*(#)\\s*(define)\\s+([A-Za-z_]\\w*)",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.directive.fsl" },
+            "2": { "name": "keyword.control.directive.define.fsl" },
+            "3": { "name": "entity.name.function.preprocessor.fsl" }
+          },
+          "end": "(?<!\\\\)$",
+          "patterns": [
+            {
+              "match": "\\\\$",
+              "name": "constant.character.escape.line-continuation.fsl"
+            },
+            { "include": "#comments" },
+            { "include": "#keywords" },
+            { "include": "#specifiers" },
+            { "include": "#types" },
+            { "include": "#builtin-variables" },
+            { "include": "#constants" },
+            { "include": "#builtin-functions" },
+            { "include": "#function-call" },
+            { "include": "#numbers" },
+            { "include": "#operators" },
+            { "include": "#punctuation" }
+          ]
+        },
+        {
+          "name": "meta.preprocessor.conditional.fsl",
+          "match": "^\\s*(#)\\s*(ifdef|undef)\\s+([A-Za-z_]\\w*)",
+          "captures": {
+            "1": { "name": "punctuation.definition.directive.fsl" },
+            "2": { "name": "keyword.control.directive.conditional.fsl" },
+            "3": { "name": "entity.name.function.preprocessor.fsl" }
+          }
+        },
+        {
+          "name": "meta.preprocessor.conditional.fsl",
+          "match": "^\\s*(#)\\s*(else|endif)\\b",
+          "captures": {
+            "1": { "name": "punctuation.definition.directive.fsl" },
+            "2": { "name": "keyword.control.directive.conditional.fsl" }
+          }
+        }
+      ]
+    },
+    "kernel-declaration": {
+      "patterns": [
+        {
+          "name": "meta.kernel.declaration.fsl",
+          "match": "\\b(kernel)\\s*(\\[)([^\\]]*)(\\])\\s*([A-Za-z_]\\w*)?",
+          "captures": {
+            "1": { "name": "keyword.other.kernel.fsl" },
+            "2": { "name": "punctuation.section.brackets.begin.fsl" },
+            "3": { "patterns": [{ "include": "#numbers" }, { "include": "#punctuation" }] },
+            "4": { "name": "punctuation.section.brackets.end.fsl" },
+            "5": { "name": "entity.name.function.kernel.fsl" }
+          }
+        },
+        {
+          "name": "keyword.other.kernel.fsl",
+          "match": "\\bkernel\\b"
+        },
+        {
+          "name": "meta.name-binding.fsl",
+          "match": "([A-Za-z_]\\w*)\\s*(:)\\s*(GlobalInvocationID)\\b",
+          "captures": {
+            "1": { "name": "variable.parameter.fsl" },
+            "2": { "name": "punctuation.separator.binding.fsl" },
+            "3": { "name": "support.variable.builtin.fsl" }
+          }
+        }
+      ]
+    },
+    "layout-declaration": {
+      "patterns": [
+        {
+          "name": "keyword.other.layout.fsl",
+          "match": "\\blayout\\b"
+        },
+        {
+          "name": "constant.language.format.buffer.fsl",
+          "match": "\\b(std140|std430)\\b"
+        },
+        {
+          "name": "constant.language.format.texture.fsl",
+          "match": "\\b(rgba16f|rgba32f)\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.fsl",
+          "match": "\\b(if|else|for|while|do|switch|case|default|break|continue|return|discard)\\b"
+        },
+        {
+          "name": "storage.modifier.resource.fsl",
+          "match": "\\b(uniform|buffer|shared)\\b"
+        }
+      ]
+    },
+    "specifiers": {
+      "name": "storage.modifier.fsl",
+      "match": "\\b(in|out|inout|const)\\b"
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.fsl",
+          "match": "\\b(float|double)[234]x[234]\\b"
+        },
+        {
+          "name": "storage.type.fsl",
+          "match": "\\b(float|int|uint|double|bool)[234]?\\b"
+        },
+        {
+          "name": "storage.type.glsl.fsl",
+          "match": "\\b(void|[ibud]?vec[234]|mat[234](x[234])?|image2D|image2DArray|image3D|sampler2D|sampler3D|samplerCube)\\b"
+        }
+      ]
+    },
+    "builtin-variables": {
+      "name": "support.variable.builtin.fsl",
+      "match": "\\b(GlobalInvocationID|gl_GlobalInvocationID|gl_LocalInvocationID|gl_LocalInvocationIndex|gl_WorkGroupID|gl_WorkGroupSize|gl_NumWorkGroups)\\b"
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.fsl",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.other.macro.fsl",
+          "match": "\\b[A-Z][A-Z0-9_]+\\b"
+        }
+      ]
+    },
+    "builtin-functions": {
+      "name": "support.function.builtin.fsl",
+      "match": "\\b(radians|degrees|sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|asinh|acosh|atanh|pow|exp|log|exp2|log2|sqrt|inversesqrt|abs|sign|floor|trunc|round|roundEven|ceil|fract|mod|modf|min|max|clamp|mix|step|smoothstep|isnan|isinf|floatBitsToInt|floatBitsToUint|intBitsToFloat|uintBitsToFloat|fma|frexp|ldexp|length|distance|dot|cross|normalize|faceforward|reflect|refract|matrixCompMult|outerProduct|transpose|determinant|inverse|lessThan|lessThanEqual|greaterThan|greaterThanEqual|equal|notEqual|any|all|not|imageLoad|imageStore|imageSize|imageAtomicAdd|imageAtomicMin|imageAtomicMax|imageAtomicAnd|imageAtomicOr|imageAtomicXor|imageAtomicExchange|imageAtomicCompSwap|atomicAdd|atomicMin|atomicMax|atomicAnd|atomicOr|atomicXor|atomicExchange|atomicCompSwap|barrier|memoryBarrier|memoryBarrierBuffer|memoryBarrierShared|memoryBarrierImage|groupMemoryBarrier|texture|texelFetch|textureLod|textureSize|packHalf2x16|unpackHalf2x16|packUnorm2x16|unpackUnorm2x16|packSnorm2x16|unpackSnorm2x16|bitfieldExtract|bitfieldInsert|bitfieldReverse|bitCount|findLSB|findMSB)\\s*(?=\\()"
+    },
+    "function-call": {
+      "name": "entity.name.function.fsl",
+      "match": "\\b[A-Za-z_]\\w*\\s*(?=\\()"
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.fsl",
+          "match": "\\b0[xX][0-9a-fA-F]+[uU]?\\b"
+        },
+        {
+          "name": "constant.numeric.float.fsl",
+          "match": "\\b(\\d+\\.\\d*|\\.\\d+|\\d+[eE][+-]?\\d+)([eE][+-]?\\d+)?[fF]?\\b|\\b\\d+\\.\\d*[fF]?"
+        },
+        {
+          "name": "constant.numeric.integer.fsl",
+          "match": "\\b\\d+[uU]?\\b"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.fsl",
+      "begin": "\"",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.fsl" } },
+      "end": "\"",
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.fsl" } }
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.fsl",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.assignment.fsl",
+          "match": "\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|<<=|>>=|="
+        },
+        {
+          "name": "keyword.operator.logical.fsl",
+          "match": "&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.operator.bitwise.fsl",
+          "match": "<<|>>|&|\\||\\^|~"
+        },
+        {
+          "name": "keyword.operator.arithmetic.fsl",
+          "match": "\\+\\+|--|\\+|-|\\*|/|%"
+        },
+        {
+          "name": "keyword.operator.ternary.fsl",
+          "match": "\\?|:"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        { "name": "punctuation.terminator.statement.fsl", "match": ";" },
+        { "name": "punctuation.separator.comma.fsl", "match": "," },
+        { "name": "punctuation.accessor.fsl", "match": "\\." }
+      ]
+    }
+  }
+}

@@ -1,0 +1,21 @@
+<idea-plugin>
+    <id>io.github.fluxx7.fsl</id>
+    <name>FSL — Fluxxi Shader Language</name>
+    <vendor url="https://github.com/Fluxx7/FluxxiShaderLanguage-Godot">Fluxx7</vendor>
+    <description><![CDATA[
+        Syntax highlighting for the Fluxxi Shader Language (<code>.fsl</code>),
+        a compute-shader language that transpiles to GLSL.
+        <br/><br/>
+        Highlights <code>kernel[x, y, z]</code> declarations, <code>layout(...)</code>
+        buffer/texture resources, FSL vector type aliases (<code>float2</code>,
+        <code>int4</code>, ...), parameter specifiers, name bindings such as
+        <code>id : GlobalInvocationID</code>, preprocessor directives, and GLSL builtins.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>org.jetbrains.plugins.textmate</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <textmate.bundleProvider implementation="io.github.fluxx7.fsl.FslTextMateBundleProvider"/>
+    </extensions>
+</idea-plugin>

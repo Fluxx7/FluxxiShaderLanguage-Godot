@@ -5,7 +5,7 @@ import sys
 from methods import print_error
 
 
-libname = "EXTENSION-NAME"
+libname = "fluxxishaderlang"
 projectdir = "project"
 
 localEnv = Environment(tools=["default"], PLATFORM="")
@@ -37,8 +37,15 @@ Run the following command to download godot-cpp:
 
 env = SConscript("godot-cpp/SConstruct", {"env": env, "customs": customs})
 
-env.Append(CPPPATH=["src/"])
-sources = Glob("src/*.cpp")
+# Recursively collect source directories under src/ so headers can be included
+# with paths relative to any of them, and gather all .cpp files for compilation.
+# src/gen is excluded here because its generated doc_data is appended separately.
+source_dirs = [root for root, _, _ in os.walk("src") if "gen" not in root.split(os.sep)]
+env.Append(CPPPATH=source_dirs)
+
+sources = []
+for directory in source_dirs:
+    sources += Glob("{}/*.cpp".format(directory))
 
 if env["target"] in ["editor", "template_debug"]:
     try:
