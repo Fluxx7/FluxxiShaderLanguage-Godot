@@ -3,12 +3,13 @@
 #include "godot_cpp/variant/string.hpp"
 #include "godot_cpp/templates/local_vector.hpp"
 #include "godot_cpp/templates/hash_map.hpp"
+#include "godot_cpp/templates/a_hash_map.hpp"
 #include <variant>
+#include "fsl/fsl_defs.h"
 
 using namespace godot;
 
-template<class... Ts> struct overload : Ts... { using Ts::operator()...; };
-template<class... Ts> overload(Ts...) -> overload<Ts...>;
+
 
 class Token {
 public:
@@ -51,24 +52,12 @@ struct CodeNode {
 };
 
 struct TextureDef {
-    enum Format {
-        RGBA32F,
-        RGBA16F
-    };
-    Format format;
+    TextureFormat format;
 };
 
 struct BufferDef {
-    enum BufferType {
-        UNIFORM,
-        STORAGE
-    };
-    enum Layout {
-        STD140,
-        STD430
-    };
     BufferType buftype;
-    Layout layout;
+    BufferFormat layout;
     LocalVector<VariableDecl> fields;
 };
 
@@ -77,12 +66,59 @@ struct ResourceNode {
     std::variant<VariableDecl, BufferDef, TextureDef> resource;
 };
 
-String tokens_to_string(const LocalVector<Token> &tokens) {
+inline String tokens_to_string(const LocalVector<Token> &tokens) {
     String output = "";
     for (const auto &token : tokens) {
         output += token.contents;
     }
     return output;
+}
+
+inline FSLType tokens_to_fslType(const godot::LocalVector<Token> &tokens) {
+    FSLPrimitive primitive_type = FLOAT;
+    FSLVecSize vec_size = ONE;
+    LocalVector<uint32_t> array_dims;
+    uint32_t index = 0;
+    while (index < tokens.size()) {
+        switch (index){
+            case 0: {
+                uint32_t type_index = 0;
+                for (auto val : fsl_primitives) {
+                    if (tokens[0].contents == val) {
+                        primitive_type = (FSLPrimitive) type_index;
+                    } else {
+                        type_index++;
+                    }
+                }
+                uint32_t final_char_index = tokens[0].contents.length() - 1;
+                String final_char = tokens[0].contents.substr(final_char_index);
+                if (final_char.is_valid_int()) {
+                    uint32_t token_val = final_char.to_int();
+                    if (token_val > 4 || token_val == 0) {
+                        printvf("Invalid vector size %d", token_val);
+                        break;
+                    }
+                    vec_size = (FSLVecSize) token_val;
+                }
+            } break;
+            default:
+                if (tokens[index].token_type == Token::LEFTBRACKET) {
+                    index++;
+                    if (tokens[index].token_type == Token::INTEGER) {
+                        array_dims.push_back(tokens[index].contents.to_int());
+                        index++;
+                    } else {
+                        array_dims.push_back(0);
+                    }
+                }
+                break;
+        }
+        index++;
+    }
+    if (array_dims.size() > 0) {
+        return (FSLArray) {(FSLCoreType){primitive_type, vec_size}, array_dims};
+    }
+    return (FSLCoreType){primitive_type, vec_size};
 }
 
 struct KernelNode {

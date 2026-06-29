@@ -6,6 +6,7 @@
 #include <godot_cpp/godot.hpp>
 
 #include "fsl/api/fsl_file.h"
+#include "compute_shaders/compute_kernel.h"
 
 using namespace godot;
 
@@ -14,6 +15,8 @@ void initialize_gdextension_types(ModuleInitializationLevel p_level)
 	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
 		return;
 	}
+	GDREGISTER_CLASS(ComputeKernel);
+	GDREGISTER_CLASS(ComputePlan);
 	GDREGISTER_CLASS(FSLFile);
 }
 

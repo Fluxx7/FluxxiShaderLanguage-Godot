@@ -463,9 +463,9 @@ std::optional<ResourceNode> _parse_buffer(const LocalVector<Token>& tokens, uint
     ResourceNode new_buffer;
     BufferDef buf_def;
     if (tokens[token_index].contents == "std140") {
-        buf_def.layout = BufferDef::STD140;
+        buf_def.layout = STD140;
     } else if (tokens[token_index].contents == "std430") {
-        buf_def.layout = BufferDef::STD430;
+        buf_def.layout = STD430;
     }
     token_index++;
     if (tokens[token_index].contents != ")") {
@@ -476,9 +476,9 @@ std::optional<ResourceNode> _parse_buffer(const LocalVector<Token>& tokens, uint
     DISCARD_WHITESPACE_N;
 
     if (tokens[token_index].contents == "uniform") {
-        buf_def.buftype = BufferDef::UNIFORM;
+        buf_def.buftype = UNIFORM;
     } else if (tokens[token_index].contents == "buffer") {
-        buf_def.buftype = BufferDef::STORAGE;
+        buf_def.buftype = STORAGE;
     } else {
         print_error(vformat("Unexpected token \"%s\" in buffer declaration, expected \"uniform\" or \"buffer\"", tokens[token_index].contents));
         return {};
@@ -522,9 +522,9 @@ std::optional<ResourceNode> _parse_texture(const LocalVector<Token>& tokens, uin
     ResourceNode new_texture;
     TextureDef tex_def;
     if (tokens[token_index].contents == "rgba16f") {
-        tex_def.format = TextureDef::RGBA16F;
+        tex_def.format = RGBA16F;
     } else if (tokens[token_index].contents == "rgba32f") {
-        tex_def.format = TextureDef::RGBA16F;
+        tex_def.format = RGBA32F;
     }
     token_index++;
     if (tokens[token_index].contents != ")") {
@@ -694,10 +694,6 @@ std::optional<LocalVector<Token>> _expand_macro(const LocalVector<Token>& tokens
             if (tokens[token_index].contents == ",") {
                 if (curr_arg_tokens.size() > 0) {
                     args[curr_macro.args[arg_index]] = curr_arg_tokens;
-                    String debug_string = "";
-                    for (auto &token : curr_arg_tokens) {
-                        debug_string += token.contents;
-                    }
                     arg_index++;
                     curr_arg_tokens.clear();
                     token_index++;
@@ -960,12 +956,6 @@ std::optional<fslAST> FSLParser::get_ast(String path) {
         return {};
     }
     const LocalVector<Token> tokens = *parse_out;
-
-    // String debug_text = "";
-    // for (const auto &token : tokens) {
-    //     debug_text += token.contents;
-    // }
-    // print_line(debug_text);
     
     parser._parse_file(ast, tokens, out_linenum, code_linenum);
 	return ast;

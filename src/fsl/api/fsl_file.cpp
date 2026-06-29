@@ -2,7 +2,7 @@
 #include "godot_cpp/classes/file_access.hpp"
  
 void print_shader_info(fslAST &currAst);
-String gen_resource_code(ResourceNode &resource, uint32_t binding);
+Pair<ComputeKernel::ResourceInfo, String> gen_resource(ResourceNode &resource, uint32_t set, uint32_t binding);
 
 String to_original_type(String identifier) {
     static const char *changed_types[] = {
@@ -69,7 +69,8 @@ String to_original_name(const String &name) {
 /******** STATIC METHODS *********/
 void FSLFile::_bind_methods() {
     ClassDB::bind_method(D_METHOD("test"), &FSLFile::test);
-    ClassDB::bind_method(D_METHOD("get_kernel", "kernel_name"), &FSLFile::get_kernel);
+    ClassDB::bind_method(D_METHOD("get_kernel_source", "kernel_name"), &FSLFile::get_kernel_source);
+    ClassDB::bind_method(D_METHOD("get_kernel", "kernel_name", "rendering_device"), &FSLFile::get_kernel, DEFVAL(nullptr));
     ClassDB::bind_static_method("FSLFile", D_METHOD("from_file", "file_path"), &FSLFile::from_file);
 }
 
@@ -91,7 +92,7 @@ FSLFile::FSLFile(String file_path) {
 
 /******** PUBLIC METHODS *********/
 
-String FSLFile::get_kernel(StringName kernel_name) {
+String FSLFile::get_kernel_source(StringName kernel_name) {
     if (kernel_sources.find(kernel_name) != kernel_sources.end()) {
         return kernel_sources[kernel_name];
     }
@@ -99,6 +100,21 @@ String FSLFile::get_kernel(StringName kernel_name) {
 	return String();
 }
 
+Ref<ComputeKernel> FSLFile::get_kernel(StringName kernel_name, RenderingDevice *rd = nullptr) {
+    if (rd == nullptr) {
+        rd = RenderingServer::get_singleton()->get_rendering_device();
+        if (rd == nullptr) {
+            rd = RenderingServer::get_singleton()->create_local_rendering_device();
+            ERR_FAIL_NULL_V(rd, memnew(ComputeKernel("", ComputeKernel::KernelInfo(), nullptr)));
+        }
+    }
+    if (kernel_sources.find(kernel_name) != kernel_sources.end()) {
+        auto new_kernel = Ref<ComputeKernel>(memnew(ComputeKernel(kernel_sources[kernel_name], compute_kernels[kernel_name], rd)));
+        return new_kernel;
+    }
+    print_error(vformat("Could not find kernel with name \"%s\"", kernel_name));
+	return Ref<ComputeKernel>(memnew(ComputeKernel("", ComputeKernel::KernelInfo(), rd)));
+}
 
 void FSLFile::test() {
     print_shader_info(currAst);
@@ -106,13 +122,22 @@ void FSLFile::test() {
 
 /******** HELPERS *********/
 
-String gen_kernel_code(KernelNode &kernel, HashMap<StringName, ResourceNode> &resources) {
+Pair<ComputeKernel::KernelInfo, String> gen_kernel(KernelNode &kernel, HashMap<StringName, ResourceNode> &resources) {
+    ComputeKernel::KernelInfo kernel_info;
     String kernel_code = vformat("\nlayout(local_size_x = %d, local_size_y = %d, local_size_z = %d) in;\n", kernel.local_x_threads, kernel.local_y_threads, kernel.local_z_threads);
+    kernel_info.kernel_name = kernel.name;
+    kernel_info.local_invocations[0] = kernel.local_x_threads;
+    kernel_info.local_invocations[1] = kernel.local_y_threads;
+    kernel_info.local_invocations[2] = kernel.local_z_threads;
+
     LocalVector<StringName> used_resources;
     if (kernel.push_constants.size() > 0) {
         kernel_code += "\nlayout(push_constant) restrict readonly uniform PushConstants {\n";
         for (auto &push_constant : kernel.push_constants) {
+            ComputeKernel::VariableInfo pc_info;
+            pc_info.type = tokens_to_fslType(push_constant.type);
             kernel_code += vformat("\t%s %s;\n", tokens_to_string(push_constant.type), push_constant.name);
+            kernel_info.push_constants[push_constant.name] = pc_info;
         }
         kernel_code += "};\n";
     }
@@ -125,8 +150,9 @@ String gen_kernel_code(KernelNode &kernel, HashMap<StringName, ResourceNode> &re
                     kernel_code += to_original_name(kernel.name_bindings[token.contents]);
                 } else {
                     if (resources.has(token.contents)) {
-                        if (!used_resources.has(token.contents)) {
-                            used_resources.push_back(token.contents);
+                        StringName resource_name = resources[token.contents].name;
+                        if (!used_resources.has(resource_name)) {
+                            used_resources.push_back(resource_name);
                         }
                     }
                     kernel_code += token.contents;
@@ -140,22 +166,32 @@ String gen_kernel_code(KernelNode &kernel, HashMap<StringName, ResourceNode> &re
         }
     }
     kernel_code += "}\n";
-    String resource_code = "";
+    String resources_code = "";
     uint32_t next_binding = 0;
+    uint32_t set = 0;
     for (auto &resource_name : used_resources) {
-        resource_code += gen_resource_code(resources[resource_name], next_binding++);
+        auto [resource_info, resource_code] = gen_resource(resources[resource_name], set, next_binding++);
+        kernel_info.bindings[resource_name] = resource_info;
+        resources_code += resource_code;
     }
-    return resource_code + kernel_code;
+    return {kernel_info, resources_code + kernel_code};
 }
 
-String gen_resource_code(ResourceNode &resource, uint32_t binding) {
+Pair<ComputeKernel::ResourceInfo, String> gen_resource(ResourceNode &resource, uint32_t set, uint32_t binding) {
+    ComputeKernel::ResourceInfo res_info;
+    res_info.set = set;
+    res_info.binding = binding;
     String resource_code = vformat("\nlayout(set = 0, binding = %d, ", binding);
     std::visit(overload{
         [&](BufferDef &buffer)          { 
-            String buffer_type = buffer.buftype == BufferDef::UNIFORM ? "uniform" : "buffer";
-            String buffer_layout = buffer.layout == BufferDef::STD140 ? "std140" : "std430";
+            ComputeKernel::BufferInfo buf_info;
+            buf_info.type = buffer.buftype;
+            buf_info.format = buffer.layout;
+            String buffer_type = buffer.buftype == UNIFORM ? "uniform" : "buffer";
+            String buffer_layout = buffer.layout == STD140 ? "std140" : "std430";
             resource_code += vformat("%s) %s restrict %s {\n", buffer_layout, buffer_type, resource.name);
             for (auto field : buffer.fields) {
+                ComputeKernel::VariableInfo field_info;
                 String type_string = "";
                 String postname_string = "";
                 for (const auto &token : field.type) {
@@ -171,26 +207,34 @@ String gen_resource_code(ResourceNode &resource, uint32_t binding) {
                             break;
                     }
                 }
+                field_info.type = tokens_to_fslType(field.type);
+                buf_info.fields[field.name] = field_info;
                 resource_code += vformat("\t%s %s%s;\n", type_string, field.name, postname_string);
             }
             resource_code += "};\n";
+            res_info.type_info = buf_info;
         },
         [&](TextureDef &texture) { 
-            String tex_format = texture.format == TextureDef::RGBA16F ? "rgba16f" : "rgba32f";
+            ComputeKernel::TextureInfo tex_info;
+            tex_info.format = texture.format;
+            String tex_format = texture.format == RGBA16F ? "rgba16f" : "rgba32f";
             resource_code += vformat("%s) restrict uniform image2D %s;\n", tex_format, resource.name);
+            res_info.type_info = tex_info;
         },
         [&](VariableDecl &uniform)  {
+            ComputeKernel::VariableInfo var_info;
+            res_info.type_info = var_info;
         }
     }, resource.resource);
-    return resource_code;
+    return {res_info, resource_code};
 }
 
 void _print_resource(ResourceNode &resource) {
     print_line(vformat("\nResource %s:", resource.name));
     std::visit(overload{
         [&](BufferDef &buffer)          { 
-            String buffer_type = buffer.buftype == BufferDef::UNIFORM ? "Uniform" : "Storage";
-            String buffer_layout = buffer.layout == BufferDef::STD140 ? "std140" : "std430";
+            String buffer_type = buffer.buftype == UNIFORM ? "Uniform" : "Storage";
+            String buffer_layout = buffer.layout == STD140 ? "std140" : "std430";
             print_line(vformat("\t%s buffer with format %s", buffer_type, buffer_layout));
             print_line("\tBuffer fields:");
             for (auto field : buffer.fields) {
@@ -198,7 +242,7 @@ void _print_resource(ResourceNode &resource) {
             }
         },
         [&](TextureDef &texture) { 
-            String tex_format = texture.format == TextureDef::RGBA16F ? "rgba16f" : "rgba32f";
+            String tex_format = texture.format == RGBA16F ? "rgba16f" : "rgba32f";
             print_line(vformat("\tTexture with format %s", tex_format));
         },
         [&](VariableDecl &uniform)  {
@@ -232,7 +276,9 @@ void FSLFile::load_shader() {
                 }
             },
             [&](KernelNode &kernel) { 
-                kernel_sources[kernel.name] = shared_code + gen_kernel_code(kernel, resources);
+                auto [kernel_info, kernel_source] = gen_kernel(kernel, resources);
+                kernel_sources[kernel.name] = shared_code + kernel_source;
+                compute_kernels[kernel.name] = kernel_info;
             },
             [&](ResourceNode &resource) {
                 resources[resource.name] = resource;

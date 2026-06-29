@@ -68,4 +68,12 @@ library = env.SharedLibrary(
 copy = env.Install("{}/bin/{}/".format(projectdir, env["platform"]), library)
 
 default_args = [library, copy]
+
+# Always regenerate compile_commands.json as part of the default build so VSCode
+# IntelliSense stays current (new .cpp files get include paths automatically),
+# even on a plain `scons` invocation without compiledb=yes. godot-cpp registers
+# the "compiledb" target (the compilation_db tool + CompilationDatabase node) on
+# our env unconditionally; here we just opt it into Default.
+default_args += ["compiledb"]
+
 Default(*default_args)

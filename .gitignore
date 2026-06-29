@@ -9,6 +9,9 @@
 # Ignore scons database
 .sconsign*.dblite
 
+# Ignore shared SCons object cache (SCONS_CACHE)
+.scons_cache/
+
 # Ignore custom.py
 custom.py
 

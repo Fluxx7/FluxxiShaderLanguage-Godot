@@ -3,10 +3,14 @@
 #include "godot_cpp/classes/ref_counted.hpp"
 #include "godot_cpp/templates/local_vector.hpp"
 #include "godot_cpp/templates/hash_map.hpp"
+#include "godot_cpp/templates/a_hash_map.hpp"
 #include "godot_cpp/classes/rd_shader_source.hpp"
+#include "godot_cpp/classes/rendering_server.hpp"
 #include <unordered_map>
 
 #include "fsl/parsing/fsl_parser.h"
+#include "fsl/fsl_defs.h"
+#include "compute_shaders/compute_kernel.h"
 
 using namespace godot;
 
@@ -22,14 +26,17 @@ protected:
 
     unsigned long prev_transpile_time;
     HashMap<StringName, String> kernel_sources;  
+    HashMap<StringName, ComputeKernel::KernelInfo> compute_kernels;
     StringName path;
     fslAST currAst;
 public:
-
     FSLFile(String file_path);
 
 	~FSLFile() override = default;
-    String get_kernel(StringName kernel_name);
+    String get_kernel_source(StringName kernel_name);
+    Ref<ComputeKernel> get_kernel(StringName kernel_name, RenderingDevice *rd);
+
+
     static Ref<FSLFile> from_file(String file_path);
     
     void test();
