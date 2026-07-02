@@ -156,7 +156,7 @@ Token::TokenType get_token_type(String token_string) {
     push_tok = 1
 
 LocalVector<Token> FSLParser::_tokenize(String lexee) {
-    uint char_index = 0;
+    uint32_t char_index = 0;
     LocalVector<char> token_buffer = {};
     LocalVector<Token> tokens = {};
     Token next_tok;
