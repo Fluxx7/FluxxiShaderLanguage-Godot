@@ -12,7 +12,7 @@
 #include <variant>
 
 #include "fsl/fsl_defs.h"
-#include "shader_resource.h"
+#include "fsl_resource.h"
 
 using namespace godot;
 
@@ -21,22 +21,6 @@ using namespace godot;
 class ComputeKernel : public RefCounted {
     GDCLASS(ComputeKernel, RefCounted)
 public:
-    struct VariableInfo {
-        FSLType type;
-    };
-    struct TextureInfo {
-        TextureFormat format;
-    };
-    struct BufferInfo {
-        BufferType type;
-        BufferFormat format;
-        HashMap<StringName, VariableInfo> fields;
-    };
-    struct ResourceInfo {
-        uint32_t set;
-        uint32_t binding;
-        std::variant<BufferInfo, TextureInfo, VariableInfo> type_info;
-    };
     struct KernelInfo {
         StringName kernel_name;
         HashMap<StringName, ResourceInfo> bindings;
@@ -52,7 +36,10 @@ protected:
     KernelInfo kernel_info = {};
     void _init_resources();
     void _generate_pipeline();
-    UniformSet uniform_set;
+    HashMap<StringName, ResourceType> fsl_resources;
+    HashMap<StringName, Ref<FSLBuffer>> fsl_buffers;
+    HashMap<StringName, Ref<FSLTexture>> fsl_textures;
+    FSLUniformSet uniform_set;
 public:
     RenderingDevice* kernel_rd;
 
@@ -60,22 +47,26 @@ public:
     RID pipeline = RID();
     
     Ref<RDShaderSPIRV> shader_spirv;
-    ShaderResourceStorage *resource_storage;
     HashSet<StringName> unbound_resources;
 
     ComputeKernel(String source, KernelInfo info, RenderingDevice *rd);
-    void _assign_resource(GID uniform_id, uint32_t set, uint32_t binding);
+    void _assign_resource(Ref<FSLResource> resource, uint32_t set, uint32_t binding);
     
     void print_info();
 
-    void assign_resource(GID uniform_id, StringName resource_name);
+    void assign_resource(Ref<FSLResource> resource, StringName resource_name);
     void dispatch(uint32_t x_invocations, uint32_t y_invocations, uint32_t z_invocations, TypedDictionary<StringName, Variant> push_constants = {});
     
-    GID create_buffer(BufferType buffer_type, uint32_t size_bytes, PackedByteArray data = {});
-    GID create_texture(uint32_t size_x, uint32_t size_y, TextureFormat texture_type = RGBA32F);
+    // static Ref<FSLBuffer> create_buffer(BufferType buffer_type, uint32_t size_bytes, PackedByteArray data = {}, RenderingDevice* rd = nullptr);
+    // static Ref<FSLTexture> create_texture(uint32_t size_x, uint32_t size_y, TextureFormat texture_type = RGBA32F, RenderingDevice* rd = nullptr);
 
-    void bind_texture_callback(GID texture_id, Callable callback);
-    void set_texture(GID texture_id, uint32_t size_x, uint32_t size_y, Ref<Image> tex);
+    // static void bind_texture_callback(Ref<FSLTexture> resource, Callable callback, RenderingDevice* rd = nullptr);
+    // static void set_texture(Ref<FSLTexture> resource, uint32_t size_x, uint32_t size_y, Ref<Image> tex, RenderingDevice* rd = nullptr);
+    std::tuple<uint32_t, uint32_t, uint32_t> get_workgroups(uint32_t x_invocations, uint32_t y_invocations, uint32_t z_invocations);
+
+    Ref<FSLBuffer> get_buffer(StringName buffer_name);
+    Ref<FSLTexture> get_texture(StringName texture_name);
+    
 
     RID get_pipeline_rid();
     RID get_uniform_set_rid();
@@ -110,13 +101,14 @@ protected:
         TypedDictionary<StringName, Variant> push_constants = {};
     };
     static void _bind_methods();
-    void bind(RenderingDevice *rd, int64_t compute_list);
+    void bind(int64_t compute_list);
     LocalVector<ShaderDispatch> dispatches;
     LocalVector<ShaderDispatch> temp_dispatches;
     LocalVector<Ref<ComputePlan>> compute_plans;
     LocalVector<Ref<ComputePlan>> temp_plans;
     LocalVector<Pair<ComputePlanItem, uint32_t>> compute_items;
     LocalVector<Pair<ComputePlanItem, uint32_t>> temp_items;
+    void _dispatch_shader(ShaderDispatch &shader_dispatch, int64_t compute_list);
 public:
     RenderingDevice* plan_rd;
     static Ref<ComputePlan> make_new(RenderingDevice* rd);
@@ -126,4 +118,3 @@ public:
     Ref<ComputePlan> add_barrier(bool is_temp = false);
     Ref<ComputePlan> add_kernel(Ref<ComputeKernel> kernel, uint32_t x_invocations, uint32_t y_invocations, uint32_t z_invocations, TypedDictionary<StringName, Variant> push_constants = {}, bool is_temp = false);
 };
-

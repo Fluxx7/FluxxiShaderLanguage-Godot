@@ -11,6 +11,7 @@
 #include "fsl/parsing/fsl_parser.h"
 #include "fsl/fsl_defs.h"
 #include "compute_shaders/compute_kernel.h"
+#include "compute_shaders/compute_group.h"
 
 using namespace godot;
 
@@ -35,6 +36,7 @@ public:
 	~FSLFile() override = default;
     String get_kernel_source(StringName kernel_name);
     Ref<ComputeKernel> get_kernel(StringName kernel_name, RenderingDevice *rd);
+    Ref<ComputeGroup> get_kernel_group(RenderingDevice *rd = nullptr);
 
 
     static Ref<FSLFile> from_file(String file_path);

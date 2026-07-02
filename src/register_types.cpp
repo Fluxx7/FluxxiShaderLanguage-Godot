@@ -7,6 +7,8 @@
 
 #include "fsl/api/fsl_file.h"
 #include "compute_shaders/compute_kernel.h"
+#include "compute_shaders/fsl_resource.h"
+#include "compute_shaders/compute_group.h"
 
 using namespace godot;
 
@@ -18,6 +20,10 @@ void initialize_gdextension_types(ModuleInitializationLevel p_level)
 	GDREGISTER_CLASS(ComputeKernel);
 	GDREGISTER_CLASS(ComputePlan);
 	GDREGISTER_CLASS(FSLFile);
+	GDREGISTER_CLASS(ComputeGroup);
+	GDREGISTER_ABSTRACT_CLASS(FSLResource);
+	GDREGISTER_CLASS(FSLBuffer);
+	GDREGISTER_CLASS(FSLTexture);
 }
 
 void uninitialize_gdextension_types(ModuleInitializationLevel p_level) {

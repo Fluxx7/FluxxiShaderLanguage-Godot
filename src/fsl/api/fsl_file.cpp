@@ -2,7 +2,7 @@
 #include "godot_cpp/classes/file_access.hpp"
  
 void print_shader_info(fslAST &currAst);
-Pair<ComputeKernel::ResourceInfo, String> gen_resource(ResourceNode &resource, uint32_t set, uint32_t binding);
+Pair<ResourceInfo, String> gen_resource(ResourceNode &resource, uint32_t set, uint32_t binding);
 
 String to_original_type(String identifier) {
     static const char *changed_types[] = {
@@ -116,6 +116,18 @@ Ref<ComputeKernel> FSLFile::get_kernel(StringName kernel_name, RenderingDevice *
 	return Ref<ComputeKernel>(memnew(ComputeKernel("", ComputeKernel::KernelInfo(), rd)));
 }
 
+Ref<ComputeGroup> FSLFile::get_kernel_group(RenderingDevice *rd) {
+    if (rd == nullptr) {
+        rd = RenderingServer::get_singleton()->get_rendering_device();
+        if (rd == nullptr) {
+            rd = RenderingServer::get_singleton()->create_local_rendering_device();
+            ERR_FAIL_NULL_V(rd, memnew(ComputeGroup));
+        }
+    }
+
+	return memnew(ComputeGroup);
+}
+
 void FSLFile::test() {
     print_shader_info(currAst);
 }
@@ -133,8 +145,9 @@ Pair<ComputeKernel::KernelInfo, String> gen_kernel(KernelNode &kernel, HashMap<S
     LocalVector<StringName> used_resources;
     if (kernel.push_constants.size() > 0) {
         kernel_code += "\nlayout(push_constant) restrict readonly uniform PushConstants {\n";
+        uint32_t curr_index = 0;
         for (auto &push_constant : kernel.push_constants) {
-            ComputeKernel::VariableInfo pc_info;
+            VariableInfo pc_info;
             pc_info.type = tokens_to_fslType(push_constant.type);
             kernel_code += vformat("\t%s %s;\n", tokens_to_string(push_constant.type), push_constant.name);
             kernel_info.push_constants[push_constant.name] = pc_info;
@@ -177,21 +190,21 @@ Pair<ComputeKernel::KernelInfo, String> gen_kernel(KernelNode &kernel, HashMap<S
     return {kernel_info, resources_code + kernel_code};
 }
 
-Pair<ComputeKernel::ResourceInfo, String> gen_resource(ResourceNode &resource, uint32_t set, uint32_t binding) {
-    ComputeKernel::ResourceInfo res_info;
+Pair<ResourceInfo, String> gen_resource(ResourceNode &resource, uint32_t set, uint32_t binding) {
+    ResourceInfo res_info;
     res_info.set = set;
     res_info.binding = binding;
     String resource_code = vformat("\nlayout(set = 0, binding = %d, ", binding);
     std::visit(overload{
         [&](BufferDef &buffer)          { 
-            ComputeKernel::BufferInfo buf_info;
+            BufferInfo buf_info;
             buf_info.type = buffer.buftype;
             buf_info.format = buffer.layout;
             String buffer_type = buffer.buftype == UNIFORM ? "uniform" : "buffer";
             String buffer_layout = buffer.layout == STD140 ? "std140" : "std430";
             resource_code += vformat("%s) %s restrict %s {\n", buffer_layout, buffer_type, resource.name);
             for (auto field : buffer.fields) {
-                ComputeKernel::VariableInfo field_info;
+                VariableInfo field_info;
                 String type_string = "";
                 String postname_string = "";
                 for (const auto &token : field.type) {
@@ -208,6 +221,13 @@ Pair<ComputeKernel::ResourceInfo, String> gen_resource(ResourceNode &resource, u
                     }
                 }
                 field_info.type = tokens_to_fslType(field.type);
+                if (const FSLArray* fsl_array = std::get_if<FSLArray>(&field_info.type)) {
+                    for (const auto& dimension : fsl_array->dimensions) {
+                        if (dimension == 0) {
+                            buf_info.has_unsized_field = true;
+                        }
+                    }
+                }
                 buf_info.fields[field.name] = field_info;
                 resource_code += vformat("\t%s %s%s;\n", type_string, field.name, postname_string);
             }
@@ -215,14 +235,14 @@ Pair<ComputeKernel::ResourceInfo, String> gen_resource(ResourceNode &resource, u
             res_info.type_info = buf_info;
         },
         [&](TextureDef &texture) { 
-            ComputeKernel::TextureInfo tex_info;
+            TextureInfo tex_info;
             tex_info.format = texture.format;
             String tex_format = texture.format == RGBA16F ? "rgba16f" : "rgba32f";
             resource_code += vformat("%s) restrict uniform image2D %s;\n", tex_format, resource.name);
             res_info.type_info = tex_info;
         },
         [&](VariableDecl &uniform)  {
-            ComputeKernel::VariableInfo var_info;
+            VariableInfo var_info;
             res_info.type_info = var_info;
         }
     }, resource.resource);

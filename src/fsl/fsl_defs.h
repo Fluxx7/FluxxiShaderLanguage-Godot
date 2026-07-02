@@ -112,7 +112,7 @@ godot::Variant get_fsl_basetype_default_value(const FSLBaseType &base_type);
 godot::Variant get_fsl_default_value(const FSLType &fsl_type);
 uint32_t get_fsl_base_type_size(const FSLBaseType &base_type);
 
-uint32_t get_fsl_type_size(const FSLType &fsl_type);
+uint32_t get_fsl_type_size(const FSLType &fsl_type, uint32_t unsized_count = 1);
 
 godot::PackedByteArray fsl_type_to_bytes(const FSLType &fsl_type, godot::Variant value);
 

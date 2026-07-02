@@ -156,7 +156,7 @@ uint32_t get_fsl_base_type_size(const FSLBaseType &base_type) {
     return out_size;
 }
 
-uint32_t get_fsl_type_size(const FSLType &fsl_type) {
+uint32_t get_fsl_type_size(const FSLType &fsl_type, uint32_t unsized_count) {
     uint32_t out_size = 0;
     std::visit(overload{
         [&](const FSLBaseType &base_type) {
@@ -164,6 +164,13 @@ uint32_t get_fsl_type_size(const FSLType &fsl_type) {
         },
         [&](const FSLArray &array) {
             out_size = get_fsl_base_type_size(array.base_type);
+            for (const auto& array_size : array.dimensions) {
+                if (array_size > 0) {
+                    out_size *= array_size;
+                } else {
+                    out_size *= unsized_count;
+                }
+            }
         }
     }, fsl_type);
     return out_size;
