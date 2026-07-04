@@ -11,6 +11,7 @@ script = ExtResource("1_jdh55")
 baseSpectrumRect = NodePath("baseSpectrum")
 currSpectrumRect = NodePath("currSpectrum")
 gaussianRect = NodePath("Gaussian")
+use_tma = true
 
 [node name="baseSpectrum" type="TextureRect" parent="." unique_id=838833110]
 texture_filter = 1

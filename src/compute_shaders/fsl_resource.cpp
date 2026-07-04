@@ -56,13 +56,26 @@ Ref<FSLBuffer> FSLBuffer::new_buffer(RenderingDevice *new_rd, BufferInfo buf_inf
     new_buf->rd = rd;
     new_buf->buffer_info = buf_info;
     new_buf->_init_buffer();
+    new_buf->resource_type = RESTYPE_BUFFER;
 	return new_buf;
 }
 
 void FSLBuffer::set_field(StringName field, Variant value) {
+    
 }
 
 void FSLBuffer::set_buffer(TypedDictionary<StringName, Variant> values) {
+    LocalVector<StringName> fields_set = {};
+    for (const auto& field_name : values.keys()) {
+        set_field(field_name, values[field_name]);
+        fields_set.push_back(field_name);
+    }
+}
+
+void FSLBuffer::update_buffer(TypedDictionary<StringName, Variant> values) {
+    for (const auto& field_name : values.keys()) {
+        set_field(field_name, values[field_name]);
+    }
 }
 
 void FSLBuffer::set_unsized_element_count(uint32_t num_elements) {
@@ -78,6 +91,9 @@ void FSLBuffer::set_unsized_element_count(uint32_t num_elements) {
         rid = rd->uniform_buffer_create(size_bytes);
     } else {
         rid = rd->storage_buffer_create(size_bytes);
+    }
+    for (auto &callback : callbacks) {
+        callback.call(rid);
     }
     rebuilt = true;
 }
@@ -97,6 +113,7 @@ Ref<RDUniform> FSLBuffer::get_rd_uniform(uint32_t binding, bool &needs_rebuild) 
 
 void FSLBuffer::bind_callback(Callable callback) {
     callbacks.push_back(callback);
+    callback.call(rid);
 }
 
 FSLBuffer::~FSLBuffer() {
@@ -109,13 +126,14 @@ FSLBuffer::~FSLBuffer() {
 
 void FSLTexture::_bind_methods() {
     ClassDB::bind_method(D_METHOD("bind_callback", "callback"), &FSLTexture::bind_callback);
-    ClassDB::bind_method(D_METHOD("set_texture", "size_x", "size_y", "tex"), &FSLTexture::set_texture, DEFVAL(nullptr));
+    ClassDB::bind_method(D_METHOD("set_2d_texture", "tex_width", "tex_height", "tex"), &FSLTexture::set_2d_texture, DEFVAL(nullptr));
+    ClassDB::bind_method(D_METHOD("set_3d_texture", "tex_width", "tex_height", "tex_depth", "tex"), &FSLTexture::set_3d_texture, DEFVAL(nullptr));
 }
 
 void FSLTexture::_init_texture() {
     Ref<RDTextureFormat> rd_tex_format = memnew(RDTextureFormat);
-    rd_tex_format->set_width(x);
-    rd_tex_format->set_height(y);
+    rd_tex_format->set_width(width);
+    rd_tex_format->set_height(height);
     auto format = texture_info.format == RGBA16F ? RenderingDevice::DATA_FORMAT_R16G16B16A16_SFLOAT : RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT;
     rd_tex_format->set_format(format);
     rd_tex_format->set_texture_type(RenderingDevice::TextureType::TEXTURE_TYPE_2D);
@@ -140,21 +158,27 @@ Ref<FSLTexture> FSLTexture::new_texture(RenderingDevice *new_rd, TextureInfo tex
     }
     new_tex->rd = rd;
     new_tex->texture_info = tex_info;
+    new_tex->resource_type = RESTYPE_TEXTURE;
     new_tex->_init_texture();
 	return new_tex;
 }
 
-void FSLTexture::set_texture(uint32_t size_x, uint32_t size_y, Ref<Image> tex) {
-    if (size_x != x || size_y != y) {
-        x = size_x;
-        y = size_y;
+void FSLTexture::set_2d_texture(uint32_t tex_width, uint32_t tex_height, Ref<Image> tex) {
+    if (!tex_is_2d(texture_info.type)) {
+        ERR_PRINT_ONCE("Texture is not a 2D texture");
+        return;
+    }
+    if (tex_width != width || tex_height != height) {
+        width = tex_width;
+        height = tex_height;
         rebuilt = true;
         if (rid.is_valid()) {
             rd->free_rid(rid);
         }
         Ref<RDTextureFormat> rd_tex_format = memnew(RDTextureFormat);
-        rd_tex_format->set_width(x);
-        rd_tex_format->set_height(y);
+        rd_tex_format->set_width(width);
+        rd_tex_format->set_height(height);
+        rd_tex_format->set_texture_type(RenderingDevice::TextureType::TEXTURE_TYPE_2D);
         auto format = texture_info.format == RGBA16F ? RenderingDevice::DATA_FORMAT_R16G16B16A16_SFLOAT : RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT;
         rd_tex_format->set_format(format);
         rd_tex_format->set_texture_type(RenderingDevice::TextureType::TEXTURE_TYPE_2D);
@@ -172,10 +196,53 @@ void FSLTexture::set_texture(uint32_t size_x, uint32_t size_y, Ref<Image> tex) {
         rduniform = memnew(RDUniform);
         rduniform->set_uniform_type(RenderingDevice::UNIFORM_TYPE_IMAGE);
         rduniform->add_id(rid);
-        Ref<Texture2DRD> texUniform = memnew(Texture2DRD());
-        texUniform->set_texture_rd_rid(rid);
         for (auto& callback : callbacks) {
-            callback.call(texUniform);
+            callback.call(rid);
+        }
+    } else {
+        if (tex != nullptr) {
+            rd->texture_update(rid, 0, tex->get_data());
+        }   
+    }
+}
+
+void FSLTexture::set_3d_texture(uint32_t tex_width, uint32_t tex_height, uint32_t tex_depth, Ref<Image> tex) {
+    if (!tex_is_3d(texture_info.type)) {
+        ERR_PRINT_ONCE("Texture is not a 3D texture");
+        return;
+    }
+    if (tex_width != width || tex_height != height || tex_depth != depth) {
+        width = tex_width;
+        height = tex_height;
+        depth = tex_depth;
+        rebuilt = true;
+        if (rid.is_valid()) {
+            rd->free_rid(rid);
+        }
+        Ref<RDTextureFormat> rd_tex_format = memnew(RDTextureFormat);
+        rd_tex_format->set_width(width);
+        rd_tex_format->set_height(height);
+        rd_tex_format->set_depth(tex_depth);
+        rd_tex_format->set_texture_type(RenderingDevice::TextureType::TEXTURE_TYPE_2D_ARRAY);
+        auto format = texture_info.format == RGBA16F ? RenderingDevice::DATA_FORMAT_R16G16B16A16_SFLOAT : RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT;
+        rd_tex_format->set_format(format);
+        rd_tex_format->set_texture_type(RenderingDevice::TextureType::TEXTURE_TYPE_2D);
+        rd_tex_format->set_usage_bits(
+            RenderingDevice::TextureUsageBits::TEXTURE_USAGE_CAN_COPY_FROM_BIT |
+            RenderingDevice::TextureUsageBits::TEXTURE_USAGE_STORAGE_BIT |
+            RenderingDevice::TextureUsageBits::TEXTURE_USAGE_CAN_UPDATE_BIT |
+            RenderingDevice::TextureUsageBits::TEXTURE_USAGE_SAMPLING_BIT
+        );
+        if (tex != nullptr) {
+            rid = rd->texture_create(rd_tex_format, memnew(RDTextureView), {tex->get_data()});
+        } else {
+            rid = rd->texture_create(rd_tex_format, memnew(RDTextureView));
+        }
+        rduniform = memnew(RDUniform);
+        rduniform->set_uniform_type(RenderingDevice::UNIFORM_TYPE_IMAGE);
+        rduniform->add_id(rid);
+        for (auto& callback : callbacks) {
+            callback.call(rid);
         }
     } else {
         if (tex != nullptr) {
@@ -193,9 +260,7 @@ Ref<RDUniform> FSLTexture::get_rd_uniform(uint32_t binding, bool &needs_rebuild)
 
 void FSLTexture::bind_callback(Callable callback) {
     callbacks.push_back(callback);
-    Ref<Texture2DRD> texUniform = memnew(Texture2DRD());
-    texUniform->set_texture_rd_rid(rid);
-    callback.call(texUniform);
+    callback.call(rid);
 }
 
 FSLTexture::~FSLTexture() {

@@ -16,6 +16,7 @@ inline constexpr const char* fsl_primitives[] = {
 
 inline constexpr const char* fsl_opaques[] = {
     "image2D",
+    "image2DArray"
 };
 
 inline constexpr const char* fsl_operators[] = {
@@ -62,6 +63,11 @@ enum BufferType {
 enum BufferFormat {
     STD140,
     STD430
+};
+
+enum TextureType {
+    TEXTURE2D,
+    TEXTURE2DARRAY
 };
 
 enum TextureFormat {

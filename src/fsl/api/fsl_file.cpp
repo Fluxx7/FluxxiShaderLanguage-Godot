@@ -71,6 +71,7 @@ void FSLFile::_bind_methods() {
     ClassDB::bind_method(D_METHOD("test"), &FSLFile::test);
     ClassDB::bind_method(D_METHOD("get_kernel_source", "kernel_name"), &FSLFile::get_kernel_source);
     ClassDB::bind_method(D_METHOD("get_kernel", "kernel_name", "rendering_device"), &FSLFile::get_kernel, DEFVAL(nullptr));
+    ClassDB::bind_method(D_METHOD("get_kernel_group", "rendering_device"), &FSLFile::get_kernel_group, DEFVAL(nullptr));
     ClassDB::bind_static_method("FSLFile", D_METHOD("from_file", "file_path"), &FSLFile::from_file);
 }
 
@@ -105,15 +106,15 @@ Ref<ComputeKernel> FSLFile::get_kernel(StringName kernel_name, RenderingDevice *
         rd = RenderingServer::get_singleton()->get_rendering_device();
         if (rd == nullptr) {
             rd = RenderingServer::get_singleton()->create_local_rendering_device();
-            ERR_FAIL_NULL_V(rd, memnew(ComputeKernel("", ComputeKernel::KernelInfo(), nullptr)));
+            ERR_FAIL_NULL_V(rd, Ref<ComputeKernel>());
         }
     }
     if (kernel_sources.find(kernel_name) != kernel_sources.end()) {
-        auto new_kernel = Ref<ComputeKernel>(memnew(ComputeKernel(kernel_sources[kernel_name], compute_kernels[kernel_name], rd)));
+        auto new_kernel = ComputeKernel::make_new(kernel_sources[kernel_name], compute_kernels[kernel_name], rd);
         return new_kernel;
     }
     print_error(vformat("Could not find kernel with name \"%s\"", kernel_name));
-	return Ref<ComputeKernel>(memnew(ComputeKernel("", ComputeKernel::KernelInfo(), rd)));
+	return Ref<ComputeKernel>();
 }
 
 Ref<ComputeGroup> FSLFile::get_kernel_group(RenderingDevice *rd) {
@@ -121,11 +122,14 @@ Ref<ComputeGroup> FSLFile::get_kernel_group(RenderingDevice *rd) {
         rd = RenderingServer::get_singleton()->get_rendering_device();
         if (rd == nullptr) {
             rd = RenderingServer::get_singleton()->create_local_rendering_device();
-            ERR_FAIL_NULL_V(rd, memnew(ComputeGroup));
+            ERR_FAIL_NULL_V(rd, Ref<ComputeGroup>());
         }
     }
-
-	return memnew(ComputeGroup);
+    Ref<ComputeGroup> compute_group = ComputeGroup::make_new(rd);
+    for (const auto& [kernel_name, kernel_info] : compute_kernels) {
+        compute_group->add_kernel(kernel_info, kernel_sources[kernel_name]);
+    }
+	return compute_group;
 }
 
 void FSLFile::test() {

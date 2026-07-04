@@ -3,45 +3,52 @@ extends Node
 @export var baseSpectrumRect: TextureRect
 @export var currSpectrumRect: TextureRect
 @export var gaussianRect: TextureRect
+@export var use_tma := false
 
-# file path -> expected kernel names
-const KERNEL_MANIFEST := {
-	"fsl/fft_testing/fft.fsl": ["twiddleGen", "ifftStage", "ifftTranspose"],
-	"fsl/spectrums.fsl": ["tessendorfSpectrum", "abSpectrum", "jonswapSpectrum", "tmaSpectrum"],
-	"fsl/spreadings.fsl": ["noSpreading", "positiveCosSpreading"],
-	"fsl/tessendorf_funcs.fsl": ["updateSpectrum", "ifftUnpack"],
-}
+var baseSpectrumTex2DRD := Texture2DRD.new()
+var currSpectrumTex2DRD := Texture2DRD.new()
+var gaussianTex2DRD := Texture2DRD.new()
 
 var spectrum_file = FSLFile.from_file("fsl/spectrums.fsl")
 var spreading_file = FSLFile.from_file("fsl/spreadings.fsl")
 var tess_file = FSLFile.from_file("fsl/tessendorf_funcs.fsl")
 
-@onready var tessendorf_spectrum = spectrum_file.get_kernel("tessendorfSpectrum")
+@onready var spectrums := spectrum_file.get_kernel_group()
+
+#@onready var tessendorf_spectrum = spectrums.get_kernel("tessendorfSpectrum")
 @onready var no_spreading = spreading_file.get_kernel("noSpreading")
 @onready var update_spectrum = tess_file.get_kernel("updateSpectrum")
+
 var N: int = 256
 var tileLength: float = 250.0;
 
 func _ready() -> void:
-	var spectrumMap := tessendorf_spectrum.get_texture("spectrumMap")
+	baseSpectrumRect.texture = baseSpectrumTex2DRD
+	currSpectrumRect.texture = currSpectrumTex2DRD
+	gaussianRect.texture = gaussianTex2DRD
+	var spectrum_kernel = spectrums.get_kernel("tmaSpectrum") if use_tma else spectrums.get_kernel("tessendorfSpectrum")
+	
+	var spectrumMap := spectrums.get_texture("spectrumMap")
 	spectrumMap.set_texture(N, N)
+	no_spreading.assign_resource(spectrumMap, "spectrumMap")
+	
 	var baseSpectrum := no_spreading.get_texture("baseSpectrum")
 	baseSpectrum.set_texture(N, N)
-	var spectrumCoefficients := no_spreading.get_texture("spectrumCoefficients")
-	var currSpectrum := update_spectrum.get_texture("spectrumTexture")
-	currSpectrum.set_texture(N, N)
-	var fft1_buffer := update_spectrum.get_buffer("fft1_buffers")
-	var fft2_buffer := update_spectrum.get_buffer("fft2_buffers")
-	fft1_buffer.set_unsized_element_count(N * N)
-	fft2_buffer.set_unsized_element_count(N * N)
 	baseSpectrum.bind_callback(
-		func (tex_rd):
-			baseSpectrumRect.texture = tex_rd
+		func (rid):
+			baseSpectrumTex2DRD.texture_rd_rid = rid
 			)
-	currSpectrum.bind_callback(
-		func (tex_rd):
-			currSpectrumRect.texture = tex_rd
+	update_spectrum.assign_resource(baseSpectrum, "baseSpectrum")
+
+	update_spectrum.texture_set("spectrumTexture", N, N)
+	update_spectrum.buffer_set_unsized_element_count("fft1_buffers", N * N)
+	update_spectrum.buffer_set_unsized_element_count("fft2_buffers", N * N)
+	update_spectrum.texture_bind_callback("spectrumTexture",
+		func (rid):
+			currSpectrumTex2DRD.texture_rd_rid = rid
 			)
+
+	var spectrumCoefficients := no_spreading.get_texture("spectrumCoefficients")
 	var rng = RandomNumberGenerator.new();
 	var gaussian = Image.create_empty(N, N, false, Image.Format.FORMAT_RGBAF);
 	for u in range(N):
@@ -54,23 +61,32 @@ func _ready() -> void:
 	
 	spectrumCoefficients.set_texture(N, N, gaussian)
 	spectrumCoefficients.bind_callback(
-		func (texRd):
-			gaussianRect.texture = texRd)
+		func (rid):
+			gaussianTex2DRD.texture_rd_rid = rid
+			)
 	
 	var compute_plan = ComputePlan.make_new(RenderingServer.get_rendering_device())
 	
-	no_spreading.assign_resource(spectrumMap, "spectrumMap")
-	no_spreading.print_info()
-	update_spectrum.assign_resource(baseSpectrum, "baseSpectrum")
 	
-	no_spreading.print_info()
-
-	compute_plan.add_kernel(tessendorf_spectrum, N, N, 1, {
-		"texSize": N,
-		"windSpeed": 17.0,
-		"A": 0.02,
-		"tile_length": tileLength,
-	})
+	
+	var spectrum_push_constants : Dictionary[StringName, Variant] = {}
+	if use_tma:
+		spectrum_push_constants = {
+			"texSize": N,
+			"windSpeed": 17.5,
+			"fetch": 10000.0,
+			"depth": 100.0,
+			"tile_length": 250.0
+		}
+	else:
+		spectrum_push_constants = {
+			"texSize": N,
+			"windSpeed": 17.5,
+			"A": 0.02,
+			"tile_length": 250.0
+		}
+		
+	compute_plan.add_kernel(spectrum_kernel, N, N, 1, spectrum_push_constants)
 	compute_plan.add_barrier()
 	compute_plan.add_kernel(no_spreading, N, N, 1, {
 		"tile_length": tileLength,

@@ -29,7 +29,6 @@ public:
     };
 
 private:
-	ComputeKernel() = default;
 protected:
 	static void _bind_methods();
     String source;
@@ -41,6 +40,7 @@ protected:
     HashMap<StringName, Ref<FSLTexture>> fsl_textures;
     FSLUniformSet uniform_set;
 public:
+    ComputeKernel() = default;
     RenderingDevice* kernel_rd;
 
     RID shader_comp = RID();
@@ -49,23 +49,28 @@ public:
     Ref<RDShaderSPIRV> shader_spirv;
     HashSet<StringName> unbound_resources;
 
-    ComputeKernel(String source, KernelInfo info, RenderingDevice *rd);
+    static Ref<ComputeKernel> make_new(String source, KernelInfo info, RenderingDevice* rd);
+
     void _assign_resource(Ref<FSLResource> resource, uint32_t set, uint32_t binding);
     
     void print_info();
 
     void assign_resource(Ref<FSLResource> resource, StringName resource_name);
+    bool try_assign_resource(Ref<FSLResource> resource, StringName resource_name);
     void dispatch(uint32_t x_invocations, uint32_t y_invocations, uint32_t z_invocations, TypedDictionary<StringName, Variant> push_constants = {});
+    void dispatch_workgroups(uint32_t x_workgroups, uint32_t y_workgroups, uint32_t z_workgroups, TypedDictionary<StringName, Variant> push_constants = {});
     
-    // static Ref<FSLBuffer> create_buffer(BufferType buffer_type, uint32_t size_bytes, PackedByteArray data = {}, RenderingDevice* rd = nullptr);
-    // static Ref<FSLTexture> create_texture(uint32_t size_x, uint32_t size_y, TextureFormat texture_type = RGBA32F, RenderingDevice* rd = nullptr);
-
-    // static void bind_texture_callback(Ref<FSLTexture> resource, Callable callback, RenderingDevice* rd = nullptr);
-    // static void set_texture(Ref<FSLTexture> resource, uint32_t size_x, uint32_t size_y, Ref<Image> tex, RenderingDevice* rd = nullptr);
     std::tuple<uint32_t, uint32_t, uint32_t> get_workgroups(uint32_t x_invocations, uint32_t y_invocations, uint32_t z_invocations);
 
     Ref<FSLBuffer> get_buffer(StringName buffer_name);
     Ref<FSLTexture> get_texture(StringName texture_name);
+
+    void buffer_set_unsized_element_count(StringName buffer_name, uint32_t element_count);
+    void buffer_bind_callback(StringName buffer_name, Callable callback);
+
+    void texture_set_2d(StringName texture_name, uint32_t width, uint32_t height, Ref<Image> tex = nullptr);
+    void texture_set_3d(StringName texture_name, uint32_t width, uint32_t height, uint32_t depth, Ref<Image> tex = nullptr);
+    void texture_bind_callback(StringName texture_name, Callable callback);
     
 
     RID get_pipeline_rid();

@@ -22,6 +22,7 @@ struct VariableInfo {
 };
 struct TextureInfo {
     TextureFormat format;
+    TextureType type;
 };
 struct BufferInfo {
     BufferType type;
@@ -73,6 +74,7 @@ public:
 
     void set_field(StringName field, Variant value);
     void set_buffer(TypedDictionary<StringName, Variant> values);
+    void update_buffer(TypedDictionary<StringName, Variant> values);
     void set_unsized_element_count(uint32_t num_elements);
     void bind_callback(Callable callback);
 
@@ -85,7 +87,7 @@ class FSLTexture : public FSLResource {
     GDCLASS(FSLTexture, FSLResource)
 private:
 protected:
-    uint32_t x = 1, y = 1;
+    uint32_t width = 1, height = 1, depth = 1;
     TextureInfo texture_info;
     static void _bind_methods();
     void _init_texture();
@@ -94,7 +96,8 @@ public:
 
     static Ref<FSLTexture> new_texture(RenderingDevice* new_rd, TextureInfo tex_info);
 
-    void set_texture(uint32_t size_x, uint32_t size_y, Ref<Image> tex = nullptr);
+    void set_2d_texture(uint32_t tex_width, uint32_t tex_height, Ref<Image> tex = nullptr);
+    void set_3d_texture(uint32_t tex_width, uint32_t tex_height, uint32_t tex_depth, Ref<Image> tex = nullptr);
     void bind_callback(Callable callback);
 
     Ref<RDUniform> get_rd_uniform(uint32_t binding, bool &needs_rebuild) override;
@@ -125,3 +128,21 @@ public:
     }
     RID get_rid(RID shader_rid, uint32_t set_index = 0);
 };
+
+inline bool tex_is_2d(TextureType tex_type) {
+    switch (tex_type) {
+        case TEXTURE2D:
+            return true;
+        default:
+            return false;
+    }
+}
+
+inline bool tex_is_3d(TextureType tex_type) {
+    switch (tex_type) {
+        case TEXTURE2DARRAY:
+            return true;
+        default:
+            return false;
+    }
+}

@@ -53,6 +53,7 @@ struct CodeNode {
 
 struct TextureDef {
     TextureFormat format;
+    TextureType type;
 };
 
 struct BufferDef {
