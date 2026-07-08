@@ -176,9 +176,63 @@ uint32_t get_fsl_type_size(const FSLType &fsl_type, uint32_t unsized_count) {
     return out_size;
 }
 
+uint32_t get_fsl_base_type_alignment(const FSLBaseType &base_type, BufferFormat format) {
+    uint32_t alignment = 0;
+    std::visit(overload{
+        [&](const FSLCoreType &core_type) {
+            uint32_t primitive_size;
+            switch (core_type.primitive) {
+                case FLOAT:
+                    primitive_size = 4;
+                    break;
+                case UINT:
+                    primitive_size = 4;
+                    break;
+                case INT:
+                    primitive_size = 4;
+                    break;
+                case BOOL:
+                    primitive_size = 4;
+                    break;
+                case DOUBLE:
+                    primitive_size = 8;
+                    break;
+            }
+            uint32_t vec_coeff = core_type.vec_size == 3 ? 4 : core_type.vec_size;
+            alignment = primitive_size * vec_coeff;
+        },
+        [&](const FSLStruct &struct_type) {
+            // also not my problem rn
+        }
+    }, base_type);
+    return alignment;
+}
+
+uint32_t get_fsl_type_alignment(const FSLType &fsl_type, uint32_t unsized_count, BufferFormat format) {
+    uint32_t alignment = 0;
+    std::visit(overload{
+        [&](const FSLBaseType &base_type) {
+            alignment = get_fsl_base_type_alignment(base_type, format);
+        },
+        [&](const FSLArray &array) {
+            alignment = get_fsl_base_type_alignment(array.base_type, format);
+            if (format == STD140 && alignment < 16) {
+                alignment = 16;
+            }
+            for (const auto& array_size : array.dimensions) {
+                if (array_size > 0) {
+                    alignment *= array_size;
+                } else {
+                    alignment *= unsized_count;
+                }
+            }
+        }
+    }, fsl_type);
+    return alignment;
+}
+
 godot::PackedByteArray fsl_core_type_to_bytes(const FSLCoreType &base_type, godot::Variant value) {
     godot::PackedByteArray out_bytes = {0, 0, 0, 0};
-    // out_bytes.resize(4);
     switch (base_type.primitive) {
         case FLOAT:
             out_bytes.encode_float(0, (float) value);
@@ -219,8 +273,26 @@ godot::PackedByteArray fsl_type_to_bytes(const FSLType &fsl_type, godot::Variant
             out_bytes = fsl_base_type_to_bytes(base_type, value);
         },
         [&](const FSLArray &array) {
-            // not my problem right now
+            godot::Array array_val = (godot::Array) value;
+            if (array_val.size() == 0) {
+                ERR_PRINT("Invalid or empty array provided");
+                return;
+            }
+            for (const auto& item : array_val) {
+            }
         }
     }, fsl_type);
 	return out_bytes;
 }
+
+// using godot::Variant;
+// bool variant_matches_fsl_type(const FSLType &fsl_type, const godot::Variant &gvariant) {
+//     switch (gvariant.get_type()) {
+//         case Variant::FLOAT:
+//         case Variant::INT:
+//         case Variant::
+//         case Variant::BOOL:
+//         case Variant::VECTOR2:
+//     }
+// 	return false;
+// }

@@ -31,7 +31,7 @@ scons platform=macos arch="$ARCH" target="$TARGET" "${EXTRA[@]}" -j"$JOBS"
 
 # scons installs an arch-suffixed dylib, but fluxxishaderlang.gdextension loads
 # the non-suffixed filename. Mirror it so the freshly built lib is the one Godot opens.
-BINDIR="project/bin/macos"
+BINDIR="project/addons/fluxxishaderlang/bin/macos"
 SRC="$BINDIR/libfluxxishaderlang.macos.${TARGET}.${ARCH}.dylib"
 DST="$BINDIR/libfluxxishaderlang.macos.${TARGET}.dylib"
 if [ -f "$SRC" ]; then

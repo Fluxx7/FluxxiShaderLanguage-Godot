@@ -121,7 +121,11 @@ uint32_t get_fsl_base_type_size(const FSLBaseType &base_type);
 
 uint32_t get_fsl_type_size(const FSLType &fsl_type, uint32_t unsized_count = 1);
 
+uint32_t get_fsl_type_alignment(const FSLType &fsl_type, uint32_t unsized_count, BufferFormat format);
+
 godot::PackedByteArray fsl_type_to_bytes(const FSLType &fsl_type, godot::Variant value);
+
+// bool variant_matches_fsl_type(const FSLType &fsl_type, const godot::Variant &gvariant);
 
 template <typename... VarArgs>
 inline void printvf(const godot::String &template_string, const VarArgs... p_args) {

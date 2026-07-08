@@ -51,17 +51,26 @@ String to_original_type(String identifier) {
 
 String to_original_name(const String &name) {
     static const char *custom_names[] = {
-        "GlobalInvocationID"
+        "GlobalInvocationID",
+        "LocalInvocationID",
+        "LocalInvocationIndex",
+        "WorkGroupID",
+        "WorkGroupSize",
+        "NumWorkGroups"
     }; 
     static const char *original_names[] = {
-        "gl_GlobalInvocationID"
+        "gl_GlobalInvocationID", 
+        "gl_LocalInvocationID", 
+        "gl_LocalInvocationIndex", 
+        "gl_WorkGroupID", 
+        "gl_WorkGroupSize", 
+        "gl_NumWorkGroups"
     }; 
     uint32_t index;
-    for (auto custom_name : custom_names) {
-        if (name == custom_name) {
-            return original_names[index];
+    for (int i = 0; i < 6; i++) {
+        if (name == custom_names[i]) {
+            return original_names[i];
         }
-        index++;
     }
     return name;
 }
@@ -130,6 +139,12 @@ Ref<ComputeGroup> FSLFile::get_kernel_group(RenderingDevice *rd) {
         compute_group->add_kernel(kernel_info, kernel_sources[kernel_name]);
     }
 	return compute_group;
+}
+
+void FSLFile::set_comp_defines(TypedDictionary<StringName, String> comp_defines) {
+}
+
+void FSLFile::set_comp_define(StringName compdef_name, String value) {
 }
 
 void FSLFile::test() {
@@ -207,8 +222,9 @@ Pair<ResourceInfo, String> gen_resource(ResourceNode &resource, uint32_t set, ui
             String buffer_type = buffer.buftype == UNIFORM ? "uniform" : "buffer";
             String buffer_layout = buffer.layout == STD140 ? "std140" : "std430";
             resource_code += vformat("%s) %s restrict %s {\n", buffer_layout, buffer_type, resource.name);
+            uint32_t curr_offset = 0;
             for (auto field : buffer.fields) {
-                VariableInfo field_info;
+                BufferFieldInfo field_info;
                 String type_string = "";
                 String postname_string = "";
                 for (const auto &token : field.type) {
@@ -230,19 +246,30 @@ Pair<ResourceInfo, String> gen_resource(ResourceNode &resource, uint32_t set, ui
                         if (dimension == 0) {
                             buf_info.has_unsized_field = true;
                         }
+                        field_info.dimensions.push_back(dimension);
                     }
                 }
+                field_info.offset = curr_offset;
+                curr_offset += get_fsl_type_alignment(field_info.type, 1, buffer.layout);
+
                 buf_info.fields[field.name] = field_info;
                 resource_code += vformat("\t%s %s%s;\n", type_string, field.name, postname_string);
             }
-            resource_code += "};\n";
+            if (!(buffer.buffer_name.length() == 0)) {
+                resource_code += vformat("} %s;\n",  buffer.buffer_name);
+            } else {
+                resource_code += "};\n";
+            }
+            
             res_info.type_info = buf_info;
         },
         [&](TextureDef &texture) { 
             TextureInfo tex_info;
             tex_info.format = texture.format;
+            tex_info.type = texture.type;
             String tex_format = texture.format == RGBA16F ? "rgba16f" : "rgba32f";
-            resource_code += vformat("%s) restrict uniform image2D %s;\n", tex_format, resource.name);
+            String tex_type = texture.type == TEXTURE2D ? "image2D" : "image2DArray";
+            resource_code += vformat("%s) restrict uniform %s %s;\n", tex_format, tex_type, resource.name);
             res_info.type_info = tex_info;
         },
         [&](VariableDecl &uniform)  {
@@ -267,7 +294,8 @@ void _print_resource(ResourceNode &resource) {
         },
         [&](TextureDef &texture) { 
             String tex_format = texture.format == RGBA16F ? "rgba16f" : "rgba32f";
-            print_line(vformat("\tTexture with format %s", tex_format));
+            String tex_type = texture.type == TEXTURE2D ? "image2D" : "image2DArray";
+            print_line(vformat("\tTexture of type %s with format %s", tex_type, tex_format));
         },
         [&](VariableDecl &uniform)  {
             print_line("How the fuck");

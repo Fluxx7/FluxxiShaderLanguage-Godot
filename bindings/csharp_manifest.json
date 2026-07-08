@@ -1,0 +1,176 @@
+{
+  "namespace": "FluxxiShaderLang",
+  "classes": {
+    "FSLResource": {
+      "base": "RefCounted",
+      "abstract": true
+    },
+    "FSLBuffer": {
+      "extends": "FSLResource",
+      "methods": [
+        { "name": "bind_callback", "args": [{ "name": "callback", "type": "Callable" }] },
+        { "name": "set_field", "args": [{ "name": "field", "type": "StringName" }, { "name": "value", "type": "Variant" }] },
+        { "name": "set_buffer", "args": [{ "name": "values", "type": "Godot.Collections.Dictionary<StringName, Variant>" }] },
+        { "name": "set_unsized_element_count", "args": [{ "name": "num_elements", "type": "uint" }] }
+      ]
+    },
+    "FSLTexture": {
+      "extends": "FSLResource",
+      "methods": [
+        { "name": "bind_callback", "args": [{ "name": "callback", "type": "Callable" }] },
+        { "name": "set_2d_texture", "csharp": "Set2DTexture", "args": [
+          { "name": "tex_width", "type": "uint" },
+          { "name": "tex_height", "type": "uint" },
+          { "name": "image", "type": "Image", "default": "null" }
+        ] },
+        { "name": "set_3d_texture", "csharp": "Set3DTexture", "args": [
+          { "name": "tex_width", "type": "uint" },
+          { "name": "tex_height", "type": "uint" },
+          { "name": "tex_depth", "type": "uint" },
+          { "name": "images", "type": "Godot.Collections.Array<Image>", "default": "null" }
+        ] }
+      ]
+    },
+    "ComputeKernel": {
+      "base": "RefCounted",
+      "enums": {
+        "BufferType": { "Storage": 0, "Uniform": 1 },
+        "TextureFormat": { "Rgba32F": 0, "Rgba16F": 1 }
+      },
+      "methods": [
+        { "name": "print_info" },
+        { "name": "dispatch", "args": [
+          { "name": "x_invocations", "type": "uint" },
+          { "name": "y_invocations", "type": "uint" },
+          { "name": "z_invocations", "type": "uint" },
+          { "name": "push_constants", "type": "Godot.Collections.Dictionary<StringName, Variant>", "default": "null" }
+        ] },
+        { "name": "dispatch_workgroups", "args": [
+          { "name": "x_workgroups", "type": "uint" },
+          { "name": "y_workgroups", "type": "uint" },
+          { "name": "z_workgroups", "type": "uint" },
+          { "name": "push_constants", "type": "Godot.Collections.Dictionary<StringName, Variant>", "default": "null" }
+        ] },
+        { "name": "assign_resource", "args": [
+          { "name": "resource", "type": "FSLResource" },
+          { "name": "resource_name", "type": "StringName" }
+        ] },
+        { "name": "get_buffer", "return": "FSLBuffer", "args": [{ "name": "buffer_name", "type": "StringName" }] },
+        { "name": "get_texture", "return": "FSLTexture", "args": [{ "name": "texture_name", "type": "StringName" }] },
+        { "name": "buffer_bind_callback", "args": [
+          { "name": "buffer_name", "type": "StringName" },
+          { "name": "callback", "type": "Callable" }
+        ] },
+        { "name": "buffer_set_unsized_element_count", "args": [
+          { "name": "buffer_name", "type": "StringName" },
+          { "name": "element_count", "type": "uint" }
+        ] },
+        { "name": "texture_bind_callback", "args": [
+          { "name": "texture_name", "type": "StringName" },
+          { "name": "callback", "type": "Callable" }
+        ] },
+        { "name": "texture_set_2d", "csharp": "TextureSet2D", "args": [
+          { "name": "texture_name", "type": "StringName" },
+          { "name": "width", "type": "uint" },
+          { "name": "height", "type": "uint" },
+          { "name": "tex", "type": "Image", "default": "null" }
+        ] },
+        { "name": "texture_set_3d", "csharp": "TextureSet3D", "args": [
+          { "name": "texture_name", "type": "StringName" },
+          { "name": "width", "type": "uint" },
+          { "name": "height", "type": "uint" },
+          { "name": "depth", "type": "uint" },
+          { "name": "images", "type": "Godot.Collections.Array<Image>", "default": "null" }
+        ] }
+      ]
+    },
+    "ComputeGroup": {
+      "base": "RefCounted",
+      "methods": [
+        { "name": "print_info" },
+        { "name": "get_kernel", "return": "ComputeKernel", "args": [{ "name": "kernel_name", "type": "StringName" }] },
+        { "name": "assign_resource", "args": [
+          { "name": "resource", "type": "FSLResource" },
+          { "name": "resource_name", "type": "StringName" }
+        ] },
+        { "name": "dispatch", "args": [
+          { "name": "kernel_name", "type": "StringName" },
+          { "name": "x_invocations", "type": "uint" },
+          { "name": "y_invocations", "type": "uint" },
+          { "name": "z_invocations", "type": "uint" },
+          { "name": "push_constants", "type": "Godot.Collections.Dictionary<StringName, Variant>", "default": "null" }
+        ] },
+        { "name": "get_buffer", "return": "FSLBuffer", "args": [{ "name": "buffer_name", "type": "StringName" }] },
+        { "name": "get_texture", "return": "FSLTexture", "args": [{ "name": "texture_name", "type": "StringName" }] },
+        { "name": "buffer_bind_callback", "args": [
+          { "name": "buffer_name", "type": "StringName" },
+          { "name": "callback", "type": "Callable" }
+        ] },
+        { "name": "buffer_set_unsized_element_count", "args": [
+          { "name": "buffer_name", "type": "StringName" },
+          { "name": "element_count", "type": "uint" }
+        ] },
+        { "name": "texture_bind_callback", "args": [
+          { "name": "texture_name", "type": "StringName" },
+          { "name": "callback", "type": "Callable" }
+        ] },
+        { "name": "texture_set_2d", "csharp": "TextureSet2D", "args": [
+          { "name": "texture_name", "type": "StringName" },
+          { "name": "width", "type": "uint" },
+          { "name": "height", "type": "uint" },
+          { "name": "tex", "type": "Image", "default": "null" }
+        ] },
+        { "name": "texture_set_3d", "csharp": "TextureSet3D", "args": [
+          { "name": "texture_name", "type": "StringName" },
+          { "name": "width", "type": "uint" },
+          { "name": "height", "type": "uint" },
+          { "name": "depth", "type": "uint" },
+          { "name": "images", "type": "Godot.Collections.Array<Image>", "default": "null" }
+        ] }
+      ]
+    },
+    "ComputePlan": {
+      "base": "RefCounted",
+      "methods": [
+        { "name": "make_new", "static": true, "return": "ComputePlan", "args": [
+          { "name": "rendering_device", "type": "RenderingDevice" }
+        ] },
+        { "name": "add_barrier", "return": "ComputePlan", "args": [
+          { "name": "is_temp", "type": "bool", "default": "false" }
+        ] },
+        { "name": "add_kernel", "return": "ComputePlan", "args": [
+          { "name": "kernel", "type": "ComputeKernel" },
+          { "name": "x_invocations", "type": "uint" },
+          { "name": "y_invocations", "type": "uint" },
+          { "name": "z_invocations", "type": "uint" },
+          { "name": "push_constants", "type": "Godot.Collections.Dictionary<StringName, Variant>", "default": "null" },
+          { "name": "is_temp", "type": "bool", "default": "false" }
+        ] },
+        { "name": "add_plan", "args": [
+          { "name": "subplan", "type": "ComputePlan" },
+          { "name": "is_temp", "type": "bool", "default": "false" }
+        ] },
+        { "name": "dispatch" }
+      ]
+    },
+    "FSLFile": {
+      "base": "RefCounted",
+      "methods": [
+        { "name": "test" },
+        { "name": "from_file", "static": true, "return": "FSLFile", "args": [
+          { "name": "file_path", "type": "string" }
+        ] },
+        { "name": "get_kernel_source", "return": "string", "args": [
+          { "name": "kernel_name", "type": "StringName" }
+        ] },
+        { "name": "get_kernel", "return": "ComputeKernel", "args": [
+          { "name": "kernel_name", "type": "StringName" },
+          { "name": "rendering_device", "type": "RenderingDevice", "default": "null" }
+        ] },
+        { "name": "get_kernel_group", "return": "ComputeGroup", "args": [
+          { "name": "rendering_device", "type": "RenderingDevice", "default": "null" }
+        ] }
+      ]
+    }
+  }
+}

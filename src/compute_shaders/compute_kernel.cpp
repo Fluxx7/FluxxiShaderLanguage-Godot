@@ -24,7 +24,7 @@ void ComputeKernel::_bind_methods() {
     ClassDB::bind_method(D_METHOD("buffer_set_unsized_element_count", "buffer_name", "element_count"), &ComputeKernel::buffer_set_unsized_element_count);
     ClassDB::bind_method(D_METHOD("texture_bind_callback", "texture_name", "callback"), &ComputeKernel::texture_bind_callback);
     ClassDB::bind_method(D_METHOD("texture_set_2d", "texture_name", "width", "height", "tex"), &ComputeKernel::texture_set_2d, DEFVAL(nullptr));
-    ClassDB::bind_method(D_METHOD("texture_set_3d", "texture_name", "width", "height", "depth", "tex"), &ComputeKernel::texture_set_3d, DEFVAL(nullptr));
+    ClassDB::bind_method(D_METHOD("texture_set_3d", "texture_name", "width", "height", "depth", "images"), &ComputeKernel::texture_set_3d, DEFVAL(TypedArray<Ref<Image>>()));
 }
 
 Ref<ComputeKernel> ComputeKernel::make_new(String source, KernelInfo info, RenderingDevice *rd) {
@@ -91,10 +91,17 @@ void ComputeKernel::_init_resources() {
     }
 }
 
+uint32_t get_min_workgroup_count(uint32_t local_invocations, uint32_t requested_invocations) {
+    uint32_t def_workgroups = requested_invocations / local_invocations;
+    uint32_t remaining_invocations = requested_invocations % local_invocations;
+    return remaining_invocations > 0 ? def_workgroups + 1 : def_workgroups;
+}
+
 std::tuple<uint32_t, uint32_t, uint32_t> ComputeKernel::get_workgroups(uint32_t x_invocations, uint32_t y_invocations, uint32_t z_invocations) {
-	return std::make_tuple((x_invocations + (kernel_info.local_invocations[0] - (x_invocations % kernel_info.local_invocations[0])))/kernel_info.local_invocations[0], 
-        (y_invocations + (kernel_info.local_invocations[1] - (y_invocations % kernel_info.local_invocations[1])))/kernel_info.local_invocations[1], 
-        (z_invocations + (kernel_info.local_invocations[2] - (z_invocations % kernel_info.local_invocations[2])))/kernel_info.local_invocations[2]);
+	return std::make_tuple(
+        get_min_workgroup_count(kernel_info.local_invocations[0], x_invocations), 
+        get_min_workgroup_count(kernel_info.local_invocations[1], y_invocations), 
+        get_min_workgroup_count(kernel_info.local_invocations[2], z_invocations));
 }
 
 
@@ -255,12 +262,12 @@ void ComputeKernel::texture_set_2d(StringName texture_name, uint32_t width, uint
     fsl_textures[texture_name]->set_2d_texture(width, height, tex);
 }
 
-void ComputeKernel::texture_set_3d(StringName texture_name, uint32_t width, uint32_t height, uint32_t depth, Ref<Image> tex) {
+void ComputeKernel::texture_set_3d(StringName texture_name, uint32_t width, uint32_t height, uint32_t depth, TypedArray<Ref<Image>> images) {
     if (!fsl_textures.has(texture_name)) {
         ERR_PRINT_ONCE(vformat("Kernel has no texture named \"%s\"", texture_name));
         return;
     }
-    fsl_textures[texture_name]->set_3d_texture(width, height, depth, tex);
+    fsl_textures[texture_name]->set_3d_texture(width, height, depth, images);
 }
 
 void ComputeKernel::texture_bind_callback(StringName texture_name, Callable callback) {

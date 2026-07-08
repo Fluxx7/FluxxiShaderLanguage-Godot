@@ -57,6 +57,7 @@ struct TextureDef {
 };
 
 struct BufferDef {
+    StringName buffer_name;
     BufferType buftype;
     BufferFormat layout;
     LocalVector<VariableDecl> fields;
@@ -126,7 +127,7 @@ struct KernelNode {
     StringName name;
     uint32_t entrypoint_line;
     LocalVector<VariableDecl> push_constants;
-    HashMap<StringName, StringName> name_bindings; 
+    HashMap<StringName, String> name_bindings; 
 
     uint32_t local_x_threads;
     uint32_t local_y_threads;

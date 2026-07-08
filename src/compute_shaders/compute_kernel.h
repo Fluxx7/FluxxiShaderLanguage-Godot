@@ -69,7 +69,7 @@ public:
     void buffer_bind_callback(StringName buffer_name, Callable callback);
 
     void texture_set_2d(StringName texture_name, uint32_t width, uint32_t height, Ref<Image> tex = nullptr);
-    void texture_set_3d(StringName texture_name, uint32_t width, uint32_t height, uint32_t depth, Ref<Image> tex = nullptr);
+    void texture_set_3d(StringName texture_name, uint32_t width, uint32_t height, uint32_t depth, TypedArray<Ref<Image>> images = {});
     void texture_bind_callback(StringName texture_name, Callable callback);
     
 

@@ -25,22 +25,48 @@ void FSLBuffer::_bind_methods() {
 }
 
 
-
-void FSLBuffer::_init_buffer() {
-    _update_size_bytes(1);
-    if (buffer_info.type == UNIFORM) {
-        rid = rd->uniform_buffer_create(size_bytes);
-    } else {
-        rid = rd->storage_buffer_create(size_bytes);
-    }
-}
-
-void FSLBuffer::_update_size_bytes(uint32_t unsized_count) {
+uint32_t FSLBuffer::_get_fields_size_bytes(uint32_t unsized_count) {
     uint32_t new_size_bytes = 0;
     for (const auto &[_field_name, field] : buffer_info.fields) {
         new_size_bytes += get_fsl_type_size(field.type, unsized_count);
     }
-    size_bytes = new_size_bytes;
+    return new_size_bytes;
+}
+
+void FSLBuffer::_init_buffer() {
+    _update_size_bytes(_get_fields_size_bytes());
+}
+
+void FSLBuffer::_update_size_bytes(uint32_t new_size_bytes, PackedByteArray data) {
+    if (size_bytes != new_size_bytes) {
+        size_bytes = new_size_bytes;
+        if (rid.is_valid()) {
+            rd->free_rid(rid);
+        }
+        rduniform = memnew(RDUniform);
+        if (buffer_info.type == UNIFORM) {
+            rid = rd->uniform_buffer_create(size_bytes, data);
+            rduniform->set_uniform_type(RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER);
+        } else {
+            rid = rd->storage_buffer_create(size_bytes, data);
+            rduniform->set_uniform_type(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER);
+        }
+        rduniform->add_id(rid);
+        for (auto &callback : callbacks) {
+            callback.call(rid);
+        }
+        rebuilt = true;
+    }
+}
+
+void FSLBuffer::_push_buffer_values(uint32_t offset, PackedByteArray values) {
+    uint32_t size_required = offset + values.size();
+    if (size_required != size_bytes) {
+        PackedByteArray new_data;
+        _update_size_bytes(size_required, new_data);
+    } else {
+        rd->buffer_update(rid, offset, values.size(), values);
+    }
 }
 
 Ref<FSLBuffer> FSLBuffer::new_buffer(RenderingDevice *new_rd, BufferInfo buf_info) {
@@ -61,14 +87,32 @@ Ref<FSLBuffer> FSLBuffer::new_buffer(RenderingDevice *new_rd, BufferInfo buf_inf
 }
 
 void FSLBuffer::set_field(StringName field, Variant value) {
+    if (!buffer_info.fields.has(field)) {
+        ERR_PRINT(vformat("Buffer has no field named \"%s\"", field));
+        return;
+    }
     
+
 }
 
 void FSLBuffer::set_buffer(TypedDictionary<StringName, Variant> values) {
-    LocalVector<StringName> fields_set = {};
+    HashSet<StringName> fields_set = {};
+    HashMap<StringName, PackedByteArray> data;
     for (const auto& field_name : values.keys()) {
+        if (!buffer_info.fields.has(field_name)) {
+            ERR_PRINT(vformat("Buffer has no field named \"%s\"", field_name));
+            return;
+        }
+        data[field_name] = (fsl_type_to_bytes(buffer_info.fields[field_name].type, values[field_name]));
         set_field(field_name, values[field_name]);
-        fields_set.push_back(field_name);
+        fields_set.insert(field_name);
+    }
+    for (const auto& [field_name, _] : buffer_info.fields) {
+        if (!fields_set.has(field_name)) {
+            ERR_PRINT(vformat("No value provided for field \"%s\", default value used", field_name));
+            ERR_PRINT_ONCE(vformat("To only set the provided fields, use update_buffer"));
+
+        }
     }
 }
 
@@ -83,30 +127,12 @@ void FSLBuffer::set_unsized_element_count(uint32_t num_elements) {
         ERR_PRINT_ONCE("Buffer has no unsized array field");
         return;
     }
-    _update_size_bytes(num_elements);
-    if (rid.is_valid()) {
-        rd->free_rid(rid);
-    }
-    if (buffer_info.type == UNIFORM) {
-        rid = rd->uniform_buffer_create(size_bytes);
-    } else {
-        rid = rd->storage_buffer_create(size_bytes);
-    }
-    for (auto &callback : callbacks) {
-        callback.call(rid);
-    }
-    rebuilt = true;
+    _update_size_bytes(_get_fields_size_bytes(num_elements));
 }
 
 Ref<RDUniform> FSLBuffer::get_rd_uniform(uint32_t binding, bool &needs_rebuild) {
-	if (rebuilt) {
-        needs_rebuild = true;
-        rduniform = memnew(RDUniform);
-        auto rdbuf_type = buffer_info.type == UNIFORM ? RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER : RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER;
-        rduniform->set_uniform_type(rdbuf_type);
-        rduniform->add_id(rid);
-        rebuilt = false;
-    }
+    needs_rebuild |= rebuilt;
+    rebuilt = false;
     rduniform->set_binding(binding);
 	return rduniform;
 }
@@ -126,8 +152,8 @@ FSLBuffer::~FSLBuffer() {
 
 void FSLTexture::_bind_methods() {
     ClassDB::bind_method(D_METHOD("bind_callback", "callback"), &FSLTexture::bind_callback);
-    ClassDB::bind_method(D_METHOD("set_2d_texture", "tex_width", "tex_height", "tex"), &FSLTexture::set_2d_texture, DEFVAL(nullptr));
-    ClassDB::bind_method(D_METHOD("set_3d_texture", "tex_width", "tex_height", "tex_depth", "tex"), &FSLTexture::set_3d_texture, DEFVAL(nullptr));
+    ClassDB::bind_method(D_METHOD("set_2d_texture", "tex_width", "tex_height", "image"), &FSLTexture::set_2d_texture, DEFVAL(nullptr));
+    ClassDB::bind_method(D_METHOD("set_3d_texture", "tex_width", "tex_height", "tex_depth", "images"), &FSLTexture::set_3d_texture, DEFVAL(TypedArray<Ref<Image>>()));
 }
 
 void FSLTexture::_init_texture() {
@@ -181,7 +207,6 @@ void FSLTexture::set_2d_texture(uint32_t tex_width, uint32_t tex_height, Ref<Ima
         rd_tex_format->set_texture_type(RenderingDevice::TextureType::TEXTURE_TYPE_2D);
         auto format = texture_info.format == RGBA16F ? RenderingDevice::DATA_FORMAT_R16G16B16A16_SFLOAT : RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT;
         rd_tex_format->set_format(format);
-        rd_tex_format->set_texture_type(RenderingDevice::TextureType::TEXTURE_TYPE_2D);
         rd_tex_format->set_usage_bits(
             RenderingDevice::TextureUsageBits::TEXTURE_USAGE_CAN_COPY_FROM_BIT |
             RenderingDevice::TextureUsageBits::TEXTURE_USAGE_STORAGE_BIT |
@@ -206,7 +231,7 @@ void FSLTexture::set_2d_texture(uint32_t tex_width, uint32_t tex_height, Ref<Ima
     }
 }
 
-void FSLTexture::set_3d_texture(uint32_t tex_width, uint32_t tex_height, uint32_t tex_depth, Ref<Image> tex) {
+void FSLTexture::set_3d_texture(uint32_t tex_width, uint32_t tex_height, uint32_t tex_depth, TypedArray<Ref<Image>> images) {
     if (!tex_is_3d(texture_info.type)) {
         ERR_PRINT_ONCE("Texture is not a 3D texture");
         return;
@@ -222,19 +247,23 @@ void FSLTexture::set_3d_texture(uint32_t tex_width, uint32_t tex_height, uint32_
         Ref<RDTextureFormat> rd_tex_format = memnew(RDTextureFormat);
         rd_tex_format->set_width(width);
         rd_tex_format->set_height(height);
-        rd_tex_format->set_depth(tex_depth);
+        // rd_tex_format->set_depth(depth);
+        rd_tex_format->set_array_layers(depth);
         rd_tex_format->set_texture_type(RenderingDevice::TextureType::TEXTURE_TYPE_2D_ARRAY);
         auto format = texture_info.format == RGBA16F ? RenderingDevice::DATA_FORMAT_R16G16B16A16_SFLOAT : RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT;
         rd_tex_format->set_format(format);
-        rd_tex_format->set_texture_type(RenderingDevice::TextureType::TEXTURE_TYPE_2D);
         rd_tex_format->set_usage_bits(
             RenderingDevice::TextureUsageBits::TEXTURE_USAGE_CAN_COPY_FROM_BIT |
             RenderingDevice::TextureUsageBits::TEXTURE_USAGE_STORAGE_BIT |
             RenderingDevice::TextureUsageBits::TEXTURE_USAGE_CAN_UPDATE_BIT |
             RenderingDevice::TextureUsageBits::TEXTURE_USAGE_SAMPLING_BIT
         );
-        if (tex != nullptr) {
-            rid = rd->texture_create(rd_tex_format, memnew(RDTextureView), {tex->get_data()});
+        if (!(images.size() == 0)) {
+            TypedArray<PackedByteArray> data = {};
+            for (const Ref<Image>& image : images) {
+                data.append(image->get_data());
+            }
+            rid = rd->texture_create(rd_tex_format, memnew(RDTextureView), data);
         } else {
             rid = rd->texture_create(rd_tex_format, memnew(RDTextureView));
         }
@@ -245,8 +274,15 @@ void FSLTexture::set_3d_texture(uint32_t tex_width, uint32_t tex_height, uint32_
             callback.call(rid);
         }
     } else {
-        if (tex != nullptr) {
-            rd->texture_update(rid, 0, tex->get_data());
+        if (!(images.size() == 0)) {
+            uint32_t tex_index = 0;
+            for (const Ref<Image>& image : images) {
+                if (!(tex_index < depth)) {
+                    ERR_PRINT("Too many images provided for texture, excess images will be ignored");
+                    break;
+                }
+                rd->texture_update(rid, tex_index++, image->get_data());
+            }
         }   
     }
 }

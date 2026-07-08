@@ -504,14 +504,21 @@ std::optional<ResourceNode> _parse_buffer(const LocalVector<Token>& tokens, uint
         buf_def.fields.push_back(*var_decl);
         if (tokens[token_index].contents != ";") {
             print_error(vformat("Unexpected token \"%s\" after buffer field, expected \";\"", tokens[token_index].contents));
+            return {};
         }
         token_index++;
         DISCARD_WHITESPACE_N;
     }
     token_index++;
     DISCARD_WHITESPACE_N;
+    if (tokens[token_index].token_type == Token::IDENTIFIER) {
+        buf_def.buffer_name = tokens[token_index++].contents;
+        DISCARD_WHITESPACE_N;
+    }
     if (tokens[token_index].contents != ";") {
         print_error(vformat("Unexpected token \"%s\" after buffer declaration, expected \";\"", tokens[token_index].contents));
+        return {};
+    
     }
     token_index++;
     new_buffer.resource = buf_def;
@@ -541,7 +548,15 @@ std::optional<ResourceNode> _parse_texture(const LocalVector<Token>& tokens, uin
     token_index++;
     DISCARD_WHITESPACE_N;
 
-    // TODO: support texture types other than image2D
+    // TODO: support all image types
+    if (tokens[token_index].contents == "image2D") {
+        tex_def.type = TEXTURE2D;
+    } else if (tokens[token_index].contents == "image2DArray") {
+        tex_def.type = TEXTURE2DARRAY;
+    } else {
+        print_error(vformat("Unexpected token \"%s\" in texture declaration, expected a valid image type", tokens[token_index].contents));
+        return {};
+    }
     token_index++;
     DISCARD_WHITESPACE_N;
 
@@ -685,16 +700,17 @@ std::optional<LocalVector<Token>> _expand_macro(const LocalVector<Token>& tokens
                 if (arg_index < curr_macro.args.size()) {
                     print_error(vformat("Too few arguments provided for macro, expected %d but was given %d", curr_macro.args.size(), arg_index));
                     return {};
-                } else if (arg_index > curr_macro.args.size()) {
-                    print_error(vformat("Too many arguments provided for macro, expected %d but was given %d", curr_macro.args.size(), arg_index));
-                    return {};
-                }
+                } 
                 break;
             }
             if (tokens[token_index].contents == ",") {
                 if (curr_arg_tokens.size() > 0) {
                     args[curr_macro.args[arg_index]] = curr_arg_tokens;
                     arg_index++;
+                    if (arg_index >= curr_macro.args.size()) {
+                        print_error(vformat("Too many arguments provided for macro, expected %d", curr_macro.args.size()));
+                        return {};
+                    }
                     curr_arg_tokens.clear();
                     token_index++;
                 } else {
@@ -790,6 +806,25 @@ std::optional<LocalVector<Token>> FSLParser::_preprocess(String &path) {
                         break;
                     }
                     if (tokens[token_index].contents == "define") {
+                        valid_directive = true;
+                        token_index++;
+                        DISCARD_WHITESPACE;
+                        if (tokens[token_index].token_type != Token::IDENTIFIER) {
+                            print_error(vformat("Unexpected token \"%s\" in `define`, expected identifier", tokens[token_index].contents));
+                            return {};
+                        }
+                        String define_name = tokens[token_index++].contents;
+                        if (macros.has(define_name)) {
+                            print_error(vformat("Redefinition of \"%s\", use `undef` first to change the definition", tokens[token_index].contents));
+                            return {};
+                        }
+                        auto macro_def = _process_macro(tokens, token_index);
+                        if (!macro_def.has_value()) {
+                            return {};
+                        }
+                        macros[define_name] = *macro_def;
+                    }
+                    if (tokens[token_index].contents == "compdefine") {
                         valid_directive = true;
                         token_index++;
                         DISCARD_WHITESPACE;

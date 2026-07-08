@@ -28,6 +28,7 @@ protected:
     unsigned long prev_transpile_time;
     HashMap<StringName, String> kernel_sources;  
     HashMap<StringName, ComputeKernel::KernelInfo> compute_kernels;
+    HashMap<StringName, String> comp_defs;
     StringName path;
     fslAST currAst;
 public:
@@ -37,6 +38,8 @@ public:
     String get_kernel_source(StringName kernel_name);
     Ref<ComputeKernel> get_kernel(StringName kernel_name, RenderingDevice *rd);
     Ref<ComputeGroup> get_kernel_group(RenderingDevice *rd = nullptr);
+    void set_comp_defines(TypedDictionary<StringName, String> comp_defines);
+    void set_comp_define(StringName compdef_name, String value);
 
 
     static Ref<FSLFile> from_file(String file_path);

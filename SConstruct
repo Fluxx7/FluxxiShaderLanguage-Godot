@@ -7,6 +7,9 @@ from methods import print_error
 
 libname = "fluxxishaderlang"
 projectdir = "project"
+# The addon folder is the distributable unit: symlink or copy
+# project/addons/fluxxishaderlang into any consuming Godot project.
+addondir = "{}/addons/{}".format(projectdir, libname)
 
 localEnv = Environment(tools=["default"], PLATFORM="")
 
@@ -65,9 +68,26 @@ library = env.SharedLibrary(
     source=sources,
 )
 
-copy = env.Install("{}/bin/{}/".format(projectdir, env["platform"]), library)
+copy = env.Install("{}/bin/{}/".format(addondir, env["platform"]), library)
 
-default_args = [library, copy]
+# Generate C# wrapper classes for the bound GDExtension API from the manifest.
+# The manifest (not ClassDB reflection) is the source of truth, so names and
+# type signatures come out exactly as declared. Outputs ship inside the addon.
+import json
+
+csharp_manifest = "bindings/csharp_manifest.json"
+csharp_outdir = "{}/csharp".format(addondir)
+with open(csharp_manifest) as manifest_file:
+    csharp_classes = list(json.load(manifest_file)["classes"].keys())
+csharp_sources = env.Command(
+    ["{}/{}.cs".format(csharp_outdir, cls) for cls in csharp_classes],
+    [csharp_manifest, "bindings/generate_csharp_bindings.py"],
+    '"{}" bindings/generate_csharp_bindings.py --manifest {} --out {}'.format(
+        sys.executable, csharp_manifest, csharp_outdir
+    ),
+)
+
+default_args = [library, copy, csharp_sources]
 
 # Always regenerate compile_commands.json as part of the default build so VSCode
 # IntelliSense stays current (new .cpp files get include paths automatically),

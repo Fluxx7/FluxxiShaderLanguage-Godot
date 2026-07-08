@@ -2,9 +2,9 @@
 *.gen.*
 .godot/
 
-# Ignore library files but not the gdextension file
+# Ignore scons build output, but never the shipped addon binaries
 /bin/**
-!project/bin/*.gdextension
+!project/addons/fluxxishaderlang/bin/**
 
 # Ignore scons database
 .sconsign*.dblite

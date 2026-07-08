@@ -15,7 +15,7 @@ void ComputeGroup::_bind_methods() {
     ClassDB::bind_method(D_METHOD("buffer_set_unsized_element_count", "buffer_name", "element_count"), &ComputeGroup::buffer_set_unsized_element_count);
     ClassDB::bind_method(D_METHOD("texture_bind_callback", "texture_name", "callback"), &ComputeGroup::texture_bind_callback);
     ClassDB::bind_method(D_METHOD("texture_set_2d", "texture_name", "width", "height", "tex"), &ComputeGroup::texture_set_2d, DEFVAL(nullptr));
-    ClassDB::bind_method(D_METHOD("texture_set_3d", "texture_name", "width", "height", "depth", "tex"), &ComputeGroup::texture_set_3d, DEFVAL(nullptr));
+    ClassDB::bind_method(D_METHOD("texture_set_3d", "texture_name", "width", "height", "depth", "images"), &ComputeGroup::texture_set_3d, DEFVAL(TypedArray<Ref<Image>>()));
 }
 
 Ref<ComputeGroup> ComputeGroup::make_new(RenderingDevice *rd) {
@@ -123,12 +123,12 @@ void ComputeGroup::texture_set_2d(StringName texture_name, uint32_t width, uint3
     fsl_textures[texture_name]->set_2d_texture(width, height, tex);
 }
 
-void ComputeGroup::texture_set_3d(StringName texture_name, uint32_t width, uint32_t height, uint32_t depth, Ref<Image> tex) {
+void ComputeGroup::texture_set_3d(StringName texture_name, uint32_t width, uint32_t height, uint32_t depth, TypedArray<Ref<Image>> images) {
     if (!fsl_textures.has(texture_name)) {
         ERR_PRINT_ONCE(vformat("Kernel has no texture named \"%s\"", texture_name));
         return;
     }
-    fsl_textures[texture_name]->set_3d_texture(width, height, depth, tex);
+    fsl_textures[texture_name]->set_3d_texture(width, height, depth, images);
 }
 
 void ComputeGroup::texture_bind_callback(StringName texture_name, Callable callback) {

@@ -4,7 +4,7 @@
 void ComputePlan::_bind_methods() {
     ClassDB::bind_static_method("ComputePlan", D_METHOD("make_new", "rendering_device"), &ComputePlan::make_new);
     ClassDB::bind_method(D_METHOD("add_barrier", "is_temp"), &ComputePlan::add_barrier, DEFVAL(false));
-    ClassDB::bind_method(D_METHOD("add_kernel", "kernel", "x_invocations", "y_invocations", "z_invocations", "push_constants", "is_temp"), &ComputePlan::add_kernel, DEFVAL((TypedDictionary<uint32_t, uint32_t>())), DEFVAL(false));
+    ClassDB::bind_method(D_METHOD("add_kernel", "kernel", "x_invocations", "y_invocations", "z_invocations", "push_constants", "is_temp"), &ComputePlan::add_kernel, DEFVAL((TypedDictionary<StringName, Variant>())), DEFVAL(false));
     ClassDB::bind_method(D_METHOD("add_plan", "subplan", "is_temp"), &ComputePlan::add_plan, DEFVAL(false));
     ClassDB::bind_method(D_METHOD("dispatch"), &ComputePlan::dispatch);
 }
@@ -15,6 +15,8 @@ void ComputePlan::_dispatch_shader(ShaderDispatch &shader_dispatch, int64_t comp
         PackedByteArray pc_bytes = shader_dispatch.shader->push_constants_to_bytes(shader_dispatch.push_constants);
         uint32_t pc_byte_size = pc_bytes.size();
         plan_rd->compute_list_set_push_constant(compute_list, pc_bytes, pc_byte_size);
+    } else {
+        plan_rd->compute_list_set_push_constant(compute_list, {}, 0);
     }
     plan_rd->compute_list_bind_uniform_set(compute_list, shader_dispatch.shader->get_uniform_set_rid(), 0);
     plan_rd->compute_list_dispatch(compute_list, shader_dispatch.workgroups[0], shader_dispatch.workgroups[1], shader_dispatch.workgroups[2]);
@@ -49,6 +51,8 @@ void ComputePlan::bind(int64_t compute_list) {
             PackedByteArray pc_bytes = shader_dispatch.shader->push_constants_to_bytes(shader_dispatch.push_constants);
             uint32_t pc_byte_size = pc_bytes.size();
             plan_rd->compute_list_set_push_constant(compute_list, pc_bytes, pc_byte_size);
+        } else {
+            plan_rd->compute_list_set_push_constant(compute_list, {}, 0);
         }
         plan_rd->compute_list_bind_uniform_set(compute_list, shader_dispatch.shader->get_uniform_set_rid(), 0);
         plan_rd->compute_list_dispatch(compute_list, shader_dispatch.workgroups[0], shader_dispatch.workgroups[1], shader_dispatch.workgroups[2]);

@@ -24,11 +24,17 @@ struct TextureInfo {
     TextureFormat format;
     TextureType type;
 };
+
+struct BufferFieldInfo {
+    FSLType type;
+    uint32_t offset;
+    LocalVector<uint32_t> dimensions;
+};
 struct BufferInfo {
     BufferType type;
     BufferFormat format;
     bool has_unsized_field = false;
-    HashMap<StringName, VariableInfo> fields;
+    HashMap<StringName, BufferFieldInfo> fields;
 };
 enum ResourceType {
     RESTYPE_BUFFER,
@@ -64,9 +70,12 @@ private:
 protected:
     uint32_t size_bytes = 1;
     BufferInfo buffer_info;
+    PackedByteArray data_cache;
     static void _bind_methods();
     void _init_buffer();
-    void _update_size_bytes(uint32_t unsized_count);
+    uint32_t _get_fields_size_bytes(uint32_t unsized_count = 1);
+    void _update_size_bytes(uint32_t unsized_count, PackedByteArray data = {});
+    void _push_buffer_values(uint32_t offset, PackedByteArray values);
 public:
     FSLBuffer() = default;
 
@@ -97,12 +106,34 @@ public:
     static Ref<FSLTexture> new_texture(RenderingDevice* new_rd, TextureInfo tex_info);
 
     void set_2d_texture(uint32_t tex_width, uint32_t tex_height, Ref<Image> tex = nullptr);
-    void set_3d_texture(uint32_t tex_width, uint32_t tex_height, uint32_t tex_depth, Ref<Image> tex = nullptr);
+    void set_3d_texture(uint32_t tex_width, uint32_t tex_height, uint32_t tex_depth, TypedArray<Ref<Image>> images = {});
     void bind_callback(Callable callback);
 
     Ref<RDUniform> get_rd_uniform(uint32_t binding, bool &needs_rebuild) override;
     ~FSLTexture();
 };
+
+// class FSL2DTextureArray : public FSLResource {
+//     GDCLASS(FSL2DTextureArray, FSLResource)
+// private:
+// protected:
+//     uint32_t width = 1, height = 1, size = 1;
+//     TextureInfo texture_info;
+//     static void _bind_methods();
+//     void _init_texture();
+// public:
+//     FSL2DTextureArray() = default;
+
+//     static Ref<FSL2DTextureArray> new_texture(RenderingDevice* new_rd, TextureInfo tex_info);
+
+//     void set_size(uint32_t new_size);
+//     void set_texture(uint32_t tex_width, uint32_t tex_height, Ref<Image> tex = nullptr);
+//     void set_textures(uint32_t tex_width, uint32_t tex_height, uint32_t tex_depth, TypedArray<Ref<Image>> images = {});
+//     void bind_callback(Callable callback);
+
+//     Ref<RDUniform> get_rd_uniform(uint32_t binding, bool &needs_rebuild) override;
+//     ~FSL2DTextureArray();
+// };
 
 class FSLUniformSet {
 protected:
