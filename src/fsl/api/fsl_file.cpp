@@ -1,83 +1,21 @@
 #include "fsl_file.h"
 #include "godot_cpp/classes/file_access.hpp"
- 
+#include "console_string.h"
+
 void print_shader_info(fslAST &currAst);
-Pair<ResourceInfo, String> gen_resource(ResourceNode &resource, uint32_t set, uint32_t binding);
+Pair<ResourceInfo, String> gen_resource(ResourceNode &resource, uint32_t set, uint32_t binding, ConsoleString& code_builder);
 
-String to_original_type(String identifier) {
-    static const char *changed_types[] = {
-        "float2",
-        "float3",
-        "float4",
-        "int2",
-        "int3",
-        "int4",
-        "uint2",
-        "uint3",
-        "uint4",
-        "double2",
-        "double3",
-        "double4",
-        "bool2",
-        "bool3",
-        "bool4"
-    }; 
-    static const char *original_types[] = {
-        "vec2",
-        "vec3",
-        "vec4",
-        "ivec2",
-        "ivec3",
-        "ivec4",
-        "uvec2",
-        "uvec3",
-        "uvec4",
-        "dvec2",
-        "dvec3",
-        "dvec4",
-        "bvec2",
-        "bvec3",
-        "bvec4"
-    }; 
-    uint32_t curr_index = 0;
-    for (auto type_name : changed_types) {
-        if (identifier == type_name) {
-            return original_types[curr_index];
-        }
-        curr_index++;
-    }
-    return identifier;
-}
-
-String to_original_name(const String &name) {
-    static const char *custom_names[] = {
-        "GlobalInvocationID",
-        "LocalInvocationID",
-        "LocalInvocationIndex",
-        "WorkGroupID",
-        "WorkGroupSize",
-        "NumWorkGroups"
-    }; 
-    static const char *original_names[] = {
-        "gl_GlobalInvocationID", 
-        "gl_LocalInvocationID", 
-        "gl_LocalInvocationIndex", 
-        "gl_WorkGroupID", 
-        "gl_WorkGroupSize", 
-        "gl_NumWorkGroups"
-    }; 
-    uint32_t index;
-    for (int i = 0; i < 6; i++) {
-        if (name == custom_names[i]) {
-            return original_names[i];
-        }
-    }
-    return name;
-}
+void print_resource_node(ResourceNode& resource_node, ConsoleString &output);
+void print_buffer_def(BufferDef& buf_def, ConsoleString &output);
+void print_texture_def(TextureDef& tex_def, ConsoleString &output);
+void print_variable_decl(VariableDecl& var_decl, ConsoleString &output);
+void print_scope_node(ScopeNode& block_node, ConsoleString &output);
+void print_func_decl(FunctionDecl& func_decl, ConsoleString &output);
 
 /******** STATIC METHODS *********/
 void FSLFile::_bind_methods() {
     ClassDB::bind_method(D_METHOD("test"), &FSLFile::test);
+    ClassDB::bind_method(D_METHOD("print_AST"), &FSLFile::print_AST);
     ClassDB::bind_method(D_METHOD("get_kernel_source", "kernel_name"), &FSLFile::get_kernel_source);
     ClassDB::bind_method(D_METHOD("get_kernel", "kernel_name", "rendering_device"), &FSLFile::get_kernel, DEFVAL(nullptr));
     ClassDB::bind_method(D_METHOD("get_kernel_group", "rendering_device"), &FSLFile::get_kernel_group, DEFVAL(nullptr));
@@ -90,12 +28,7 @@ Ref<FSLFile> FSLFile::from_file(String file_path) {
 
 /******** CONSTRUCTORS *********/
 
-FSLFile::FSLFile() {
-    kernel_sources = HashMap<StringName, String>();
-}
-
 FSLFile::FSLFile(String file_path) {
-    kernel_sources = HashMap<StringName, String>();
     path = file_path;
     load_shader();
 }
@@ -103,8 +36,8 @@ FSLFile::FSLFile(String file_path) {
 /******** PUBLIC METHODS *********/
 
 String FSLFile::get_kernel_source(StringName kernel_name) {
-    if (kernel_sources.find(kernel_name) != kernel_sources.end()) {
-        return kernel_sources[kernel_name];
+    if (compute_kernels.find(kernel_name) != compute_kernels.end()) {
+        return compute_kernels[kernel_name].source;
     }
     print_error(vformat("Could not find kernel with name \"%s\"", kernel_name));
 	return String();
@@ -118,8 +51,8 @@ Ref<ComputeKernel> FSLFile::get_kernel(StringName kernel_name, RenderingDevice *
             ERR_FAIL_NULL_V(rd, Ref<ComputeKernel>());
         }
     }
-    if (kernel_sources.find(kernel_name) != kernel_sources.end()) {
-        auto new_kernel = ComputeKernel::make_new(kernel_sources[kernel_name], compute_kernels[kernel_name], rd);
+    if (compute_kernels.find(kernel_name) != compute_kernels.end()) {
+        auto new_kernel = ComputeKernel::make_new(compute_kernels[kernel_name].source, compute_kernels[kernel_name].info, rd);
         return new_kernel;
     }
     print_error(vformat("Could not find kernel with name \"%s\"", kernel_name));
@@ -135,167 +68,55 @@ Ref<ComputeGroup> FSLFile::get_kernel_group(RenderingDevice *rd) {
         }
     }
     Ref<ComputeGroup> compute_group = ComputeGroup::make_new(rd);
-    for (const auto& [kernel_name, kernel_info] : compute_kernels) {
-        compute_group->add_kernel(kernel_info, kernel_sources[kernel_name]);
+    for (const auto& [kernel_name, kernel_def] : compute_kernels) {
+        compute_group->add_kernel(kernel_def.info, kernel_def.source);
     }
 	return compute_group;
 }
 
-void FSLFile::set_comp_defines(TypedDictionary<StringName, String> comp_defines) {
-}
-
-void FSLFile::set_comp_define(StringName compdef_name, String value) {
-}
-
 void FSLFile::test() {
-    print_shader_info(currAst);
+	print_shader_info(currAst);
 }
 
 /******** HELPERS *********/
 
-Pair<ComputeKernel::KernelInfo, String> gen_kernel(KernelNode &kernel, HashMap<StringName, ResourceNode> &resources) {
-    ComputeKernel::KernelInfo kernel_info;
-    String kernel_code = vformat("\nlayout(local_size_x = %d, local_size_y = %d, local_size_z = %d) in;\n", kernel.local_x_threads, kernel.local_y_threads, kernel.local_z_threads);
-    kernel_info.kernel_name = kernel.name;
-    kernel_info.local_invocations[0] = kernel.local_x_threads;
-    kernel_info.local_invocations[1] = kernel.local_y_threads;
-    kernel_info.local_invocations[2] = kernel.local_z_threads;
-
-    LocalVector<StringName> used_resources;
-    if (kernel.push_constants.size() > 0) {
-        kernel_code += "\nlayout(push_constant) restrict readonly uniform PushConstants {\n";
-        uint32_t curr_index = 0;
-        for (auto &push_constant : kernel.push_constants) {
-            VariableInfo pc_info;
-            pc_info.type = tokens_to_fslType(push_constant.type);
-            kernel_code += vformat("\t%s %s;\n", tokens_to_string(push_constant.type), push_constant.name);
-            kernel_info.push_constants[push_constant.name] = pc_info;
-        }
-        kernel_code += "};\n";
-    }
-
-    kernel_code += "\nvoid main() {";
-    for (const auto &token : kernel.code) {
-        switch (token.token_type) {
-            case Token::IDENTIFIER: {
-                if (kernel.name_bindings.has(token.contents)) {
-                    kernel_code += to_original_name(kernel.name_bindings[token.contents]);
-                } else {
-                    if (resources.has(token.contents)) {
-                        StringName resource_name = resources[token.contents].name;
-                        if (!used_resources.has(resource_name)) {
-                            used_resources.push_back(resource_name);
-                        }
-                    }
-                    kernel_code += token.contents;
-                }
-            } break;
-            case Token::TYPE: {
-                kernel_code += to_original_type(token.contents);
-            } break;
-            default:
-                kernel_code += token.contents;
-        }
-    }
-    kernel_code += "}\n";
-    String resources_code = "";
-    uint32_t next_binding = 0;
-    uint32_t set = 0;
-    for (auto &resource_name : used_resources) {
-        auto [resource_info, resource_code] = gen_resource(resources[resource_name], set, next_binding++);
-        kernel_info.bindings[resource_name] = resource_info;
-        resources_code += resource_code;
-    }
-    return {kernel_info, resources_code + kernel_code};
-}
-
-Pair<ResourceInfo, String> gen_resource(ResourceNode &resource, uint32_t set, uint32_t binding) {
-    ResourceInfo res_info;
-    res_info.set = set;
-    res_info.binding = binding;
-    String resource_code = vformat("\nlayout(set = 0, binding = %d, ", binding);
-    std::visit(overload{
-        [&](BufferDef &buffer)          { 
-            BufferInfo buf_info;
-            buf_info.type = buffer.buftype;
-            buf_info.format = buffer.layout;
-            String buffer_type = buffer.buftype == UNIFORM ? "uniform" : "buffer";
-            String buffer_layout = buffer.layout == STD140 ? "std140" : "std430";
-            resource_code += vformat("%s) %s restrict %s {\n", buffer_layout, buffer_type, resource.name);
-            uint32_t curr_offset = 0;
-            for (auto field : buffer.fields) {
-                BufferFieldInfo field_info;
-                String type_string = "";
-                String postname_string = "";
-                for (const auto &token : field.type) {
-                    switch (token.token_type) {
-                        case Token::SPECIFIER:
-                            type_string += token.contents;
-                            break;
-                        case Token::TYPE: {
-                            type_string += to_original_type(token.contents);
-                        } break;
-                        default:
-                            postname_string += token.contents;
-                            break;
-                    }
-                }
-                field_info.type = tokens_to_fslType(field.type);
-                if (const FSLArray* fsl_array = std::get_if<FSLArray>(&field_info.type)) {
-                    for (const auto& dimension : fsl_array->dimensions) {
-                        if (dimension == 0) {
-                            buf_info.has_unsized_field = true;
-                        }
-                        field_info.dimensions.push_back(dimension);
-                    }
-                }
-                field_info.offset = curr_offset;
-                curr_offset += get_fsl_type_alignment(field_info.type, 1, buffer.layout);
-
-                buf_info.fields[field.name] = field_info;
-                resource_code += vformat("\t%s %s%s;\n", type_string, field.name, postname_string);
+void _print_scope(ScopeNode &block) {
+    for (const auto &expr : block.body) {
+        std::visit(overload{
+            [&](Statement expression) {
+                printvf("%s;", tokens_to_string(expression));
+            },
+            [&](IfNode if_node) {
+                printvf("If statement");
+            },
+            [&](ElseNode else_node) {
+                printvf("Else statement");
+            },
+            [&](ForNode for_node) {
+                printvf("For statement");
+            },
+            [&](ScopeNode subblock) {
+                printvf("{");
+                _print_scope(subblock);
+                printvf("}");
             }
-            if (!(buffer.buffer_name.length() == 0)) {
-                resource_code += vformat("} %s;\n",  buffer.buffer_name);
-            } else {
-                resource_code += "};\n";
-            }
-            
-            res_info.type_info = buf_info;
-        },
-        [&](TextureDef &texture) { 
-            TextureInfo tex_info;
-            tex_info.format = texture.format;
-            tex_info.type = texture.type;
-            String tex_format = texture.format == RGBA16F ? "rgba16f" : "rgba32f";
-            String tex_type = texture.type == TEXTURE2D ? "image2D" : "image2DArray";
-            resource_code += vformat("%s) restrict uniform %s %s;\n", tex_format, tex_type, resource.name);
-            res_info.type_info = tex_info;
-        },
-        [&](VariableDecl &uniform)  {
-            VariableInfo var_info;
-            res_info.type_info = var_info;
-        }
-    }, resource.resource);
-    return {res_info, resource_code};
+        }, expr);
+    }
 }
 
 void _print_resource(ResourceNode &resource) {
     print_line(vformat("\nResource %s:", resource.name));
     std::visit(overload{
         [&](BufferDef &buffer)          { 
-            String buffer_type = buffer.buftype == UNIFORM ? "Uniform" : "Storage";
-            String buffer_layout = buffer.layout == STD140 ? "std140" : "std430";
-            print_line(vformat("\t%s buffer with format %s", buffer_type, buffer_layout));
+            printvf("\t%s", get_buffer_desc(buffer.buftype, buffer.layout));
             print_line("\tBuffer fields:");
             for (auto field : buffer.fields) {
-                print_line(vformat("\t\tName: %s, type: %s", field.name, tokens_to_string(field.type)));
+                print_line(vformat("\t\tName: %s, type: %s", field.name, typeref_to_string(field.type)));
             }
         },
         [&](TextureDef &texture) { 
             String tex_format = texture.format == RGBA16F ? "rgba16f" : "rgba32f";
-            String tex_type = texture.type == TEXTURE2D ? "image2D" : "image2DArray";
-            print_line(vformat("\tTexture of type %s with format %s", tex_type, tex_format));
+            print_line(vformat("\tTexture of type %s with format %s", tex_to_glsl_name(texture.type), tex_format));
         },
         [&](VariableDecl &uniform)  {
             print_line("How the fuck");
@@ -309,57 +130,20 @@ void FSLFile::load_shader() {
         print_error(vformat("Failed to load shader file at \"%s\", check error messages for more detail", path));
         return;
     }
-    currAst = *ast_out;
-    String shared_code = "#version 450\n";
-    HashMap<StringName, ResourceNode> resources;
-    for (GlobalDeclaration &decl : currAst.contents) {
-        std::visit(overload{
-            [&](CodeNode &code) { 
-                shared_code += "\n";
-                for (const auto &token : code.code) {
-                    switch (token.token_type) {
-                        case Token::TYPE: {
-                            shared_code += to_original_type(token.contents);
-                        } break;
-                        default:
-                            shared_code += token.contents;
-                            break;
-                    }
-                }
-            },
-            [&](KernelNode &kernel) { 
-                auto [kernel_info, kernel_source] = gen_kernel(kernel, resources);
-                kernel_sources[kernel.name] = shared_code + kernel_source;
-                compute_kernels[kernel.name] = kernel_info;
-            },
-            [&](ResourceNode &resource) {
-                resources[resource.name] = resource;
-                std::visit(overload{
-                    [&](BufferDef &buffer) {
-                        for (auto field : buffer.fields) {
-                            resources[field.name] = resource;
-                        }
-                    },
-                    [&](TextureDef &texture) { },
-                    [&](VariableDecl &uniform)  {}
-                }, resource.resource);
-            }
-        }, decl.value);
-    }
+    currAst = std::move(*ast_out);
+    compute_kernels = CodeBuilder::get_kernels(currAst);
 }
 
 void print_shader_info(fslAST &currAst) {
     for (GlobalDeclaration &decl : currAst.contents) {
         std::visit(overload{
-            [&](CodeNode &code)          { 
+            [&](Statement &statement)          { 
                 print_line("\nShared code:");
-                print_line(vformat("Line number %d", decl.linenum));
-                print_line(tokens_to_string(code.code)); 
+                printvf("%s;", tokens_to_string(statement));
             },
             [&](KernelNode &kernel)      { 
                 print_line("\nKernel " + kernel.name + ":");
-                print_line(vformat("Entrypoint line: %d", kernel.entrypoint_line));
-                print_line(vformat("Local threads: %d, %d, %d", kernel.local_x_threads, kernel.local_y_threads, kernel.local_z_threads));
+                print_line(vformat("Local threads: %d, %d, %d", tokens_to_string(kernel.local_x_threads).to_int(), tokens_to_string(kernel.local_y_threads).to_int(), tokens_to_string(kernel.local_z_threads).to_int()));
                 if (kernel.name_bindings.size() > 0) {
                     print_line("Name bindings:");
                     for (auto [bound_name, orig_name] : kernel.name_bindings) {
@@ -369,14 +153,303 @@ void print_shader_info(fslAST &currAst) {
                 if (kernel.push_constants.size() > 0) {
                     print_line("Push constants:");
                     for (auto &push_constant : kernel.push_constants) {
-                        print_line(vformat("\tName: %s, type: %s", push_constant.name, tokens_to_string(push_constant.type)));
+                        print_line(vformat("\tName: %s, type: %s", push_constant.name, typeref_to_string(push_constant.type)));
                     }
                 }
-                print_line(vformat("Code: %s", tokens_to_string(kernel.code)));
+                printvf("Code:");
+                _print_scope(kernel.code);
             },
             [&](ResourceNode &resource)  {
                 _print_resource(resource);
+            },
+            [&](FunctionDecl &func) {
+
             }
         }, decl.value);
     }
+}
+
+
+void FSLFile::print_AST() {
+    ConsoleString output;
+    output.add_line("fslAST {");
+    output.indent();
+    for (GlobalDeclaration &decl : currAst.contents) {
+        std::visit(overload{
+            [&](Statement &statement)          { 
+                output.add_line("Statement: %s", tokens_to_string(statement));
+            },
+            [&](KernelNode &kernel)      { 
+                output.add_line("KernelNode {");
+                output.indent();
+                if (!kernel.is_valid) {
+                    output.add_line("Error");
+                    output.unindent();
+                    output.add_line("},");
+                    return;
+                }
+                output.add_line("Name: %s,", kernel.name);
+                output.add_line("Local threads: [%d, %d, %d],", tokens_to_string(kernel.local_x_threads).to_int(), tokens_to_string(kernel.local_y_threads).to_int(), tokens_to_string(kernel.local_z_threads).to_int());
+                if (kernel.name_bindings.size() > 0) {
+                    output.add_line("Name bindings {");
+                    output.indent();
+                    for (auto [bound_name, orig_name] : kernel.name_bindings) {
+                        output.add_line("Bound name: %s, original name: %s,", bound_name, orig_name);
+                    }
+                    output.unindent();
+                    output.add_line("},");
+                }
+                if (kernel.push_constants.size() > 0) {
+                    output.add_line("Push constants {");
+                    output.indent();
+                    for (auto &push_constant : kernel.push_constants) {
+                        print_variable_decl(push_constant, output);
+                    }
+                    output.unindent();
+                    output.add_line("},");
+                }
+                output.add_line("Code {");
+                output.indent();
+                String next_str = "";
+                print_scope_node(kernel.code, output);
+                output.unindent();
+                output.add_line("},");
+                output.unindent();
+                output.add_line("},");
+            },
+            [&](ResourceNode &resource)  {
+                print_resource_node(resource, output);
+            },
+            [&](FunctionDecl &func) {
+                
+            }
+        }, decl.value);
+    }
+    output.unindent();
+    output.add_line("}");
+    output.print();
+}
+
+void print_type(TypeRef &type_ref, ConsoleString &output) {
+    output.add_line("TypeRef {");
+    output.indent();
+    if (!type_ref.is_valid) {
+        output.add_line("Error");
+        output.unindent();
+        output.add_line("},");
+        return;
+    }
+    output.add_line("Type: %s,", tokens_to_string(type_ref.type));
+    if (type_ref.array_dims.size() > 0) {
+        output.add_line("Array dimensions {");
+        output.indent();
+        for (const auto& array_dim : type_ref.array_dims) {
+            if (array_dim.is_empty()) {
+                output.add_line("unsized,");
+            } else {
+                output.add_line("%s,", tokens_to_string(array_dim));
+            }
+        }
+        output.unindent();
+        output.add_line("},");
+    }
+    output.unindent();
+    output.add_line("},");
+}
+
+void print_resource_node(ResourceNode &resource_node, ConsoleString &output) {
+    output.add_line("ResourceNode {");
+    output.indent();
+    if (!resource_node.is_valid) {
+        output.add_line("Error");
+        output.unindent();
+        output.add_line("},");
+        return;
+    }
+    output.add_line("Name: %s,", resource_node.name);
+    std::visit(overload{
+        [&](BufferDef &buffer)          { 
+            print_buffer_def(buffer, output);
+        },
+        [&](TextureDef &texture) { 
+            print_texture_def(texture, output);
+        },
+        [&](VariableDecl &uniform)  {
+            print_variable_decl(uniform, output);
+        }
+    }, resource_node.resource);
+    output.unindent();
+    output.add_line("},");
+}
+
+void print_buffer_def(BufferDef &buf_def, ConsoleString &output) {
+    output.add_line("BufferDef {");
+    output.indent();
+    if (!buf_def.is_valid) {
+        output.add_line("Error");
+        output.unindent();
+        output.add_line("},");
+        return;
+    }
+    if (!buf_def.buffer_name.is_empty()) {
+        output.add_line("Local name: %s,", buf_def.buffer_name);
+    }
+    output.add_line("Type: %s,", bufferType_to_string(buf_def.buftype));
+    output.add_line("Layout: %s,", bufferFormat_to_string(buf_def.layout));
+    output.add_line("Buffer fields {");
+    output.indent();
+    for (auto field : buf_def.fields) {
+        print_variable_decl(field, output);
+    }
+    output.unindent();
+    output.add_line("},");
+    output.unindent();
+    output.add_line("},");
+}
+
+void print_texture_def(TextureDef& tex_def, ConsoleString &output) {
+    output.add_line("TextureDef {");
+    output.indent();
+    if (!tex_def.is_valid) {
+        output.add_line("Error");
+        output.unindent();
+        output.add_line("},");
+        return;
+    }
+    output.add_line("Type: %s,", textureType_to_string(tex_def.type));
+    output.add_line("Format: %s,", textureFormat_to_string(tex_def.format));
+    output.unindent();
+    output.add_line("},");
+}
+
+void print_variable_decl(VariableDecl& var_decl, ConsoleString &output) {
+    output.add_line("VariableDecl {");
+    output.indent();
+    if (!var_decl.is_valid) {
+        output.add_line("Error");
+        output.unindent();
+        output.add_line("},");
+        return;
+    }
+    output.add_line("Name: %s,", var_decl.name);
+    output.add_line("Type: {");
+    output.indent();
+    print_type(var_decl.type, output);
+    output.unindent();
+    output.add_line("},");
+    output.unindent();
+    output.add_line("},");
+}
+
+void print_scope_node(ScopeNode& block_node, ConsoleString &output) {
+    output.add_line("ScopeNode {");
+    output.indent();
+    if (!block_node.is_valid) {
+        output.add_line("Error");
+        output.unindent();
+        output.add_line("},");
+        return;
+    }
+    for (const auto &expr : block_node.body) {
+        std::visit(overload{
+            [&](Statement expression) {
+                output.add_line("Statement: %s", tokens_to_string(expression));
+            },
+            [&](IfNode if_node) {
+                output.add_line("IfNode {");
+                output.indent();
+                if (!if_node.is_valid) {
+                    output.add_line("Error");
+                    output.unindent();
+                    output.add_line("},");
+                    return;
+                }
+                output.add_line("Condition: %s,", tokens_to_string(if_node.cond));
+                output.add_line("Body {");
+                output.indent();
+                print_scope_node(if_node.body, output);
+                output.unindent();
+                output.add_line("},");
+                output.unindent();
+                output.add_line("},");
+                
+            },
+            [&](ElseNode else_node) {
+                output.add_line("ElseNode {");
+                output.indent();
+                if (!else_node.is_valid) {
+                    output.add_line("Error");
+                    output.unindent();
+                    output.add_line("},");
+                    return;
+                }
+                output.add_line("Body {");
+                output.indent();
+                print_scope_node(else_node.body, output);
+                output.unindent();
+                output.add_line("},");
+                output.unindent();
+                output.add_line("},");
+            },
+            [&](ForNode for_node) {
+                output.add_line("ForNode {");
+                output.indent();
+                if (!for_node.is_valid) {
+                    output.add_line("Error");
+                    output.unindent();
+                    output.add_line("},");
+                    return;
+                }
+                output.add_line("Initial statement: %s,", tokens_to_string(for_node.init));
+                output.add_line("Condition: %s,", tokens_to_string(for_node.cond));
+                output.add_line("Post-check statement: %s,", tokens_to_string(for_node.post));
+                output.add_line("Body {");
+                output.indent();
+                print_scope_node(for_node.body, output);
+                output.unindent();
+                output.add_line("},");
+                output.unindent();
+                output.add_line("},");
+            },
+            [&](ScopeNode subblock) {
+                print_scope_node(subblock, output);
+            }
+        }, expr);
+    }
+    output.unindent();
+    output.add_line("},");
+}
+
+void print_func_decl(FunctionDecl &func_decl, ConsoleString &output) {
+    output.add_line("FunctionDecl {");
+    output.indent();
+    if (!func_decl.is_valid) {
+        output.add_line("Error");
+        output.unindent();
+        output.add_line("},");
+        return;
+    }
+    output.add_line("Name: %s,", func_decl.name);
+    output.add_line("Return type {");
+    output.indent();
+    print_type(func_decl.return_type, output);
+    output.unindent();
+    output.add_line("},");
+    if (func_decl.args.size() > 0) {
+        output.add_line("Arguments {");
+        output.indent();
+        for (auto &arg : func_decl.args) {
+            print_variable_decl(arg, output);
+        }
+        output.unindent();
+        output.add_line("},");
+    }
+    output.add_line("Code {");
+    output.indent();
+    String next_str = "";
+    print_scope_node(func_decl.code, output);
+    output.unindent();
+    output.add_line("},");
+    output.unindent();
+    output.add_line("},");
 }

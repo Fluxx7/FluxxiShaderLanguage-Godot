@@ -12,7 +12,8 @@
 #include <variant>
 
 #include "fsl/fsl_defs.h"
-#include "fsl_resource.h"
+#include "resources/fsl_buffer.h"
+#include "resources/fsl_texture.h"
 
 using namespace godot;
 
@@ -31,14 +32,25 @@ public:
 private:
 protected:
 	static void _bind_methods();
+
     String source;
     KernelInfo kernel_info = {};
+
     void _init_resources();
     void _generate_pipeline();
-    HashMap<StringName, ResourceType> fsl_resources;
-    HashMap<StringName, Ref<FSLBuffer>> fsl_buffers;
-    HashMap<StringName, Ref<FSLTexture>> fsl_textures;
+
+    AHashMap<StringName, Ref<FSLResource>> fsl_resources;
     FSLUniformSet uniform_set;
+
+
+    template <typename T>
+    Ref<T> _get_resource_typed(const StringName &res_name) const {
+        const Ref<FSLResource> *res = fsl_resources.getptr(res_name);
+        ERR_FAIL_NULL_V_MSG(res, Ref<T>(), vformat("Kernel has no resource named \'%s\'", res_name));
+        Ref<T> typed_res = *res;
+        ERR_FAIL_COND_V_MSG(typed_res.is_null(), Ref<T>(), vformat("Resource \'%s\' is a %s, not a %s", (*res)->get_class(), T::get_class_static()));
+        return typed_res;
+    }
 public:
     ComputeKernel() = default;
     RenderingDevice* kernel_rd;
@@ -47,7 +59,6 @@ public:
     RID pipeline = RID();
     
     Ref<RDShaderSPIRV> shader_spirv;
-    HashSet<StringName> unbound_resources;
 
     static Ref<ComputeKernel> make_new(String source, KernelInfo info, RenderingDevice* rd);
 
@@ -62,15 +73,16 @@ public:
     
     std::tuple<uint32_t, uint32_t, uint32_t> get_workgroups(uint32_t x_invocations, uint32_t y_invocations, uint32_t z_invocations);
 
-    Ref<FSLBuffer> get_buffer(StringName buffer_name);
-    Ref<FSLTexture> get_texture(StringName texture_name);
+    Ref<FSLStorageBuffer> get_storage_buffer(const StringName &buffer_name);
+    Ref<FSLUniformBuffer> get_uniform_buffer(const StringName &buffer_name);
+    Ref<FSLVertexBuffer> get_vertex_buffer(const StringName &buffer_name);
+    Ref<FSLIndexBuffer> get_index_buffer(const StringName &buffer_name);
 
-    void buffer_set_unsized_element_count(StringName buffer_name, uint32_t element_count);
-    void buffer_bind_callback(StringName buffer_name, Callable callback);
+    Ref<FSLTexture2D> get_texture_2d(const StringName &texture_name);
+    Ref<FSLTexture2DArray> get_texture_2d_array(const StringName &texture_name);
 
-    void texture_set_2d(StringName texture_name, uint32_t width, uint32_t height, Ref<Image> tex = nullptr);
-    void texture_set_3d(StringName texture_name, uint32_t width, uint32_t height, uint32_t depth, TypedArray<Ref<Image>> images = {});
-    void texture_bind_callback(StringName texture_name, Callable callback);
+    Ref<FSLResource> get_resource(const StringName &res_name);
+
     
 
     RID get_pipeline_rid();

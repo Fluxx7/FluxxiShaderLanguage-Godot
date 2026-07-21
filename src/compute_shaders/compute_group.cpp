@@ -1,4 +1,5 @@
 #include "compute_group.h"
+#include "init_helpers.h"
 
 void ComputeGroup::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_kernel", "kernel_name"), &ComputeGroup::get_kernel);
@@ -9,13 +10,15 @@ void ComputeGroup::_bind_methods() {
 
     ClassDB::bind_method(D_METHOD("dispatch", "kernel_name", "x_invocations", "y_invocations", "z_invocations", "push_constants"), &ComputeGroup::dispatch, DEFVAL((TypedDictionary<uint32_t, uint32_t>())));
 
-    ClassDB::bind_method(D_METHOD("get_buffer", "buffer_name"), &ComputeGroup::get_buffer);
-    ClassDB::bind_method(D_METHOD("get_texture", "texture_name"), &ComputeGroup::get_texture);
-    ClassDB::bind_method(D_METHOD("buffer_bind_callback", "buffer_name", "callback"), &ComputeGroup::buffer_bind_callback);
-    ClassDB::bind_method(D_METHOD("buffer_set_unsized_element_count", "buffer_name", "element_count"), &ComputeGroup::buffer_set_unsized_element_count);
-    ClassDB::bind_method(D_METHOD("texture_bind_callback", "texture_name", "callback"), &ComputeGroup::texture_bind_callback);
-    ClassDB::bind_method(D_METHOD("texture_set_2d", "texture_name", "width", "height", "tex"), &ComputeGroup::texture_set_2d, DEFVAL(nullptr));
-    ClassDB::bind_method(D_METHOD("texture_set_3d", "texture_name", "width", "height", "depth", "images"), &ComputeGroup::texture_set_3d, DEFVAL(TypedArray<Ref<Image>>()));
+    ClassDB::bind_method(D_METHOD("get_storage_buffer", "buffer_name"), &ComputeGroup::get_storage_buffer);
+    ClassDB::bind_method(D_METHOD("get_uniform_buffer", "buffer_name"), &ComputeGroup::get_uniform_buffer);
+    ClassDB::bind_method(D_METHOD("get_vertex_buffer", "buffer_name"), &ComputeGroup::get_vertex_buffer);
+    ClassDB::bind_method(D_METHOD("get_index_buffer", "buffer_name"), &ComputeGroup::get_index_buffer);
+
+    ClassDB::bind_method(D_METHOD("get_texture_2d", "texture_name"), &ComputeGroup::get_texture_2d);
+    ClassDB::bind_method(D_METHOD("get_texture_2d_array", "texture_name"), &ComputeGroup::get_texture_2d_array);
+
+    ClassDB::bind_method(D_METHOD("get_resource", "resource_name"), &ComputeGroup::get_resource);
 }
 
 Ref<ComputeGroup> ComputeGroup::make_new(RenderingDevice *rd) {
@@ -25,36 +28,19 @@ Ref<ComputeGroup> ComputeGroup::make_new(RenderingDevice *rd) {
 }
 
 void ComputeGroup::print_info() {
+    for (const auto &[kernel_name, kernel] : kernels) {
+        printvf("Kernel %s:", kernel_name);
+        kernel->print_info();
+    }
 }
 
 void ComputeGroup::add_kernel(ComputeKernel::KernelInfo kernel_info, String kernel_source) {
     auto new_kernel = ComputeKernel::make_new(kernel_source, kernel_info, group_rd);
     for (const auto &[resource_name, resource_info] : kernel_info.bindings) {
-        const StringName& res_name = resource_name;
-        if (fsl_resources.has(res_name)) {
-            switch (fsl_resources[res_name]) {
-                case RESTYPE_BUFFER: new_kernel->assign_resource(fsl_buffers[res_name], res_name); break;
-                case RESTYPE_TEXTURE: new_kernel->assign_resource(fsl_textures[res_name], res_name); break;
-            }
-            continue;
+        if (!fsl_resources.has(resource_name)) {
+            fsl_resources[resource_name] = init_resource(resource_info, group_rd);
         }
-        std::visit(overload{
-            [&](const BufferInfo &buf_info) {
-                Ref<FSLBuffer> new_buf = FSLBuffer::new_buffer(group_rd, buf_info);
-                fsl_buffers[res_name] = new_buf;
-                fsl_resources[res_name] = RESTYPE_BUFFER;
-                new_kernel->assign_resource(new_buf, res_name);
-            },
-            [&](const TextureInfo &tex_info) {
-                Ref<FSLTexture> new_tex = FSLTexture::new_texture(group_rd, tex_info);
-                fsl_textures[res_name] = new_tex;
-                fsl_resources[res_name] = RESTYPE_TEXTURE;
-                new_kernel->assign_resource(new_tex, res_name);
-            },
-            [&](const VariableInfo &var_info)  {
-                print_error("\t\tHow the fuck");
-            }
-        }, resource_info.type_info);
+        new_kernel->assign_resource(fsl_resources[resource_name], resource_name);
     }
     kernels[kernel_info.kernel_name] = new_kernel;
 }
@@ -84,57 +70,36 @@ void ComputeGroup::dispatch(StringName kernel_name, uint32_t x_invocations, uint
 
 
 
-
-Ref<FSLBuffer> ComputeGroup::get_buffer(StringName buffer_name) {
-    if (!fsl_buffers.has(buffer_name)) {
-        ERR_PRINT_ONCE(vformat("ComputeGroup has no buffer named \"%s\"", buffer_name));
-    }
-	return fsl_buffers[buffer_name];
+Ref<FSLStorageBuffer> ComputeGroup::get_storage_buffer(const StringName &buffer_name) {
+	return _get_resource_typed<FSLStorageBuffer>(buffer_name);
 }
 
-Ref<FSLTexture> ComputeGroup::get_texture(StringName texture_name) {
-    if (!fsl_textures.has(texture_name)) {
-        ERR_PRINT_ONCE(vformat("Kernel has no texture named \"%s\"", texture_name));
-    }
-	return fsl_textures[texture_name];
+Ref<FSLUniformBuffer> ComputeGroup::get_uniform_buffer(const StringName &buffer_name) {
+	return _get_resource_typed<FSLUniformBuffer>(buffer_name);
 }
 
-void ComputeGroup::buffer_set_unsized_element_count(StringName buffer_name, uint32_t element_count) {
-    if (!fsl_buffers.has(buffer_name)) {
-        ERR_PRINT_ONCE(vformat("Kernel has no buffer named \"%s\"", buffer_name));
-        return;
-    }
-    fsl_buffers[buffer_name]->set_unsized_element_count(element_count);
+Ref<FSLVertexBuffer> ComputeGroup::get_vertex_buffer(const StringName &buffer_name) {
+	return _get_resource_typed<FSLVertexBuffer>(buffer_name);
 }
 
-void ComputeGroup::buffer_bind_callback(StringName buffer_name, Callable callback) {
-    if (!fsl_buffers.has(buffer_name)) {
-        ERR_PRINT_ONCE(vformat("Kernel has no buffer named \"%s\"", buffer_name));
-        return;
-    }
-    fsl_buffers[buffer_name]->bind_callback(callback);
+Ref<FSLIndexBuffer> ComputeGroup::get_index_buffer(const StringName &buffer_name) {
+	return _get_resource_typed<FSLIndexBuffer>(buffer_name);
 }
 
-void ComputeGroup::texture_set_2d(StringName texture_name, uint32_t width, uint32_t height, Ref<Image> tex) {
-    if (!fsl_textures.has(texture_name)) {
-        ERR_PRINT_ONCE(vformat("Kernel has no texture named \"%s\"", texture_name));
-        return;
-    }
-    fsl_textures[texture_name]->set_2d_texture(width, height, tex);
+// -- TEXTURES --
+
+Ref<FSLTexture2D> ComputeGroup::get_texture_2d(const StringName &texture_name) {
+	return _get_resource_typed<FSLTexture2D>(texture_name);
 }
 
-void ComputeGroup::texture_set_3d(StringName texture_name, uint32_t width, uint32_t height, uint32_t depth, TypedArray<Ref<Image>> images) {
-    if (!fsl_textures.has(texture_name)) {
-        ERR_PRINT_ONCE(vformat("Kernel has no texture named \"%s\"", texture_name));
-        return;
-    }
-    fsl_textures[texture_name]->set_3d_texture(width, height, depth, images);
+Ref<FSLTexture2DArray> ComputeGroup::get_texture_2d_array(const StringName &texture_name) {
+	return _get_resource_typed<FSLTexture2DArray>(texture_name);
 }
 
-void ComputeGroup::texture_bind_callback(StringName texture_name, Callable callback) {
-    if (!fsl_textures.has(texture_name)) {
-        ERR_PRINT_ONCE(vformat("Kernel has no texture named \"%s\"", texture_name));
-        return;
-    }
-    fsl_textures[texture_name]->bind_callback(callback);
+// -- GENERIC --
+
+Ref<FSLResource> ComputeGroup::get_resource(const StringName &res_name) {
+	const Ref<FSLResource> *res = fsl_resources.getptr(res_name);
+    ERR_FAIL_NULL_V_MSG(res, Ref<FSLResource>(), vformat("Kernel has no resource named \'%s\'", res_name));
+    return *res;
 }

@@ -1,6 +1,7 @@
 #pragma once
 #include <godot_cpp/core/defs.hpp>
 #include "godot_cpp/core/binder_common.hpp"
+#include "godot_cpp/templates/hash_map.hpp"
 #include <variant>
 
 template<class... Ts> struct overload : Ts... { using Ts::operator()...; };
@@ -60,20 +61,33 @@ enum BufferType {
     UNIFORM
 };
 
+godot::String bufferType_to_string(BufferType buf_type);
+
 enum BufferFormat {
     STD140,
-    STD430
+    STD430,
+    VERTEX,
+    INDEX
 };
+
+godot::String bufferFormat_to_string(BufferFormat buf_format);
+
+godot::String get_buffer_desc(BufferType buf_type, BufferFormat buf_format);
 
 enum TextureType {
     TEXTURE2D,
     TEXTURE2DARRAY
 };
 
+godot::String textureType_to_string(TextureType tex_type);
+
+
 enum TextureFormat {
     RGBA32F,
     RGBA16F
 };
+
+godot::String textureFormat_to_string(TextureFormat tex_format);
 
 VARIANT_ENUM_CAST(BufferType);
 VARIANT_ENUM_CAST(TextureFormat);
@@ -85,6 +99,8 @@ enum FSLPrimitive {
     BOOL,
     DOUBLE
 };
+
+uint32_t get_fsl_primitive_size(FSLPrimitive primitive);
 
 enum FSLVecSize {
     ONE = 1,

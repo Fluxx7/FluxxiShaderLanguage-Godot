@@ -7,7 +7,7 @@
 
 #include "fsl/api/fsl_file.h"
 #include "compute_shaders/compute_kernel.h"
-#include "compute_shaders/fsl_resource.h"
+#include "compute_shaders/resources/fsl_resource.h"
 #include "compute_shaders/compute_group.h"
 
 using namespace godot;
@@ -17,13 +17,27 @@ void initialize_gdextension_types(ModuleInitializationLevel p_level)
 	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
 		return;
 	}
-	GDREGISTER_CLASS(ComputeKernel);
-	GDREGISTER_CLASS(ComputePlan);
+
 	GDREGISTER_CLASS(FSLFile);
+
+	GDREGISTER_CLASS(ComputeKernel);
 	GDREGISTER_CLASS(ComputeGroup);
+
+	GDREGISTER_CLASS(ComputePlan);
+
 	GDREGISTER_ABSTRACT_CLASS(FSLResource);
-	GDREGISTER_CLASS(FSLBuffer);
-	GDREGISTER_CLASS(FSLTexture);
+	GDREGISTER_ABSTRACT_CLASS(FSLBuffer);
+	GDREGISTER_ABSTRACT_CLASS(FSLTexture);
+
+	GDREGISTER_CLASS(FSLUniformBuffer);
+	GDREGISTER_CLASS(FSLStorageBuffer);
+	GDREGISTER_CLASS(FSLVertexBuffer);
+	GDREGISTER_CLASS(FSLIndexBuffer);
+
+	GDREGISTER_CLASS(FSLTexture2D);
+	GDREGISTER_CLASS(FSLTexture2DArray);
+
+	GDREGISTER_CLASS(FSLRawResource);
 }
 
 void uninitialize_gdextension_types(ModuleInitializationLevel p_level) {

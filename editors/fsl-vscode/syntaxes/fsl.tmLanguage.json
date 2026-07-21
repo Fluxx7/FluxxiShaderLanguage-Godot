@@ -141,7 +141,7 @@
         },
         {
           "name": "constant.language.format.buffer.fsl",
-          "match": "\\b(std140|std430)\\b"
+          "match": "\\b(std140|std430|vertex|index)\\b"
         },
         {
           "name": "constant.language.format.texture.fsl",

@@ -12,13 +12,14 @@
 #include "fsl/fsl_defs.h"
 #include "compute_shaders/compute_kernel.h"
 #include "compute_shaders/compute_group.h"
+#include "code_builder.h"
 
 using namespace godot;
 
 class FSLFile : public RefCounted {
     GDCLASS(FSLFile, RefCounted)
 private:
-	FSLFile();
+	FSLFile() = default;
 protected:
 	static void _bind_methods();
     
@@ -26,9 +27,8 @@ protected:
     
 
     unsigned long prev_transpile_time;
-    HashMap<StringName, String> kernel_sources;  
-    HashMap<StringName, ComputeKernel::KernelInfo> compute_kernels;
-    HashMap<StringName, String> comp_defs;
+    
+    HashMap<StringName, KernelDef> compute_kernels;
     StringName path;
     fslAST currAst;
 public:
@@ -38,11 +38,10 @@ public:
     String get_kernel_source(StringName kernel_name);
     Ref<ComputeKernel> get_kernel(StringName kernel_name, RenderingDevice *rd);
     Ref<ComputeGroup> get_kernel_group(RenderingDevice *rd = nullptr);
-    void set_comp_defines(TypedDictionary<StringName, String> comp_defines);
-    void set_comp_define(StringName compdef_name, String value);
 
 
     static Ref<FSLFile> from_file(String file_path);
     
+    void print_AST();
     void test();
 };

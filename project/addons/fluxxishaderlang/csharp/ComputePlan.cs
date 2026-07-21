@@ -23,23 +23,14 @@ public partial class ComputePlan
 
     public static implicit operator Variant(ComputePlan wrapper) => wrapper?.Inner ?? default;
 
-    public static ComputePlan MakeNew(RenderingDevice renderingDevice)
-    {
-        GodotObject result = ClassDB.ClassCallStatic(GDClassName, MethodName.MakeNew, renderingDevice).AsGodotObject();
-        return result == null ? null : new ComputePlan(result);
-    }
+    /// <summary>Wraps a GDExtension object in the most-derived C# wrapper for its Godot class.</summary>
+    public static ComputePlan Wrap(GodotObject inner) => inner == null ? null : new ComputePlan(inner);
 
-    public ComputePlan AddBarrier(bool isTemp = false)
-    {
-        GodotObject result = Inner.Call(MethodName.AddBarrier, isTemp).AsGodotObject();
-        return result == null ? null : new ComputePlan(result);
-    }
+    public static ComputePlan MakeNew(RenderingDevice renderingDevice) => ComputePlan.Wrap(ClassDB.ClassCallStatic(GDClassName, MethodName.MakeNew, renderingDevice).AsGodotObject());
 
-    public ComputePlan AddKernel(ComputeKernel kernel, uint xInvocations, uint yInvocations, uint zInvocations, Godot.Collections.Dictionary<StringName, Variant> pushConstants = null, bool isTemp = false)
-    {
-        GodotObject result = Inner.Call(MethodName.AddKernel, kernel?.Inner, xInvocations, yInvocations, zInvocations, pushConstants ?? new Godot.Collections.Dictionary<StringName, Variant>(), isTemp).AsGodotObject();
-        return result == null ? null : new ComputePlan(result);
-    }
+    public ComputePlan AddBarrier(bool isTemp = false) => ComputePlan.Wrap(Inner.Call(MethodName.AddBarrier, isTemp).AsGodotObject());
+
+    public ComputePlan AddKernel(ComputeKernel kernel, uint xInvocations, uint yInvocations, uint zInvocations, Godot.Collections.Dictionary<StringName, Variant> pushConstants = null, bool isTemp = false) => ComputePlan.Wrap(Inner.Call(MethodName.AddKernel, kernel?.Inner, xInvocations, yInvocations, zInvocations, pushConstants ?? new Godot.Collections.Dictionary<StringName, Variant>(), isTemp).AsGodotObject());
 
     public void AddPlan(ComputePlan subplan, bool isTemp = false) => Inner.Call(MethodName.AddPlan, subplan?.Inner, isTemp);
 

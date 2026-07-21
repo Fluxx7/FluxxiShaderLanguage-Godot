@@ -50,6 +50,9 @@ class Generator:
     def __init__(self, manifest):
         self.namespace = manifest.get("namespace", "FluxxiShaderLang")
         self.classes = manifest["classes"]
+        # Engine-side enum types (e.g. "RenderingDevice.UniformType") that
+        # must round-trip through long like declared enums.
+        self.engine_enums = set(manifest.get("engine_enums", []))
         # "Class.Enum" qualified names of every declared enum, for type resolution.
         self.enum_names = {
             "{}.{}".format(cls, enum)
@@ -69,15 +72,29 @@ class Generator:
             yield parent
             parent = self.classes[parent].get("extends")
 
-    def engine_base(self, cls):
-        """The nearest engine class, taken from the root of the wrapper hierarchy."""
+    def root_of(self, cls):
+        """The root of the wrapper hierarchy containing cls (cls itself if standalone)."""
         root = cls
         for root in self.ancestors(cls):
             pass
-        return self.classes[root].get("base", "RefCounted")
+        return root
+
+    def engine_base(self, cls):
+        """The nearest engine class, taken from the root of the wrapper hierarchy."""
+        return self.classes[self.root_of(cls)].get("base", "RefCounted")
+
+    def concrete_descendants(self, cls):
+        """Manifest-order descendants of cls that Godot can report via get_class()."""
+        return [
+            other for other, spec in self.classes.items()
+            if other != cls and cls in self.ancestors(other)
+            and not spec.get("abstract", False)
+        ]
 
     def qualify_enum(self, type_name, cls):
         """Resolve a manifest type to a declared enum's qualified name, or None."""
+        if type_name in self.engine_enums:
+            return type_name
         if type_name in self.enum_names:
             return type_name
         unqualified = "{}.{}".format(cls, type_name)
@@ -127,11 +144,10 @@ class Generator:
         if ret == "void":
             lines.append("    {} => {};".format(signature, call))
         elif ret in self.classes:
-            lines.append("    {}".format(signature))
-            lines.append("    {")
-            lines.append("        GodotObject result = {}.AsGodotObject();".format(call))
-            lines.append("        return result == null ? null : new {}(result);".format(ret))
-            lines.append("    }")
+            root = self.root_of(ret)
+            cast = "" if ret == root else "({})".format(ret)
+            lines.append("    {} => {}{}.Wrap({}.AsGodotObject());".format(
+                signature, cast, root, call))
         elif enum_type is not None:
             lines.append("    {} => ({}){}.As<long>();".format(signature, enum_type, call))
         else:
@@ -147,11 +163,9 @@ class Generator:
         lines.append("    public {} {}".format(type_name, cs_name))
         lines.append("    {")
         if type_name in self.classes:
-            lines.append("        get")
-            lines.append("        {")
-            lines.append("            GodotObject result = {}.AsGodotObject();".format(get_call))
-            lines.append("            return result == null ? null : new {}(result);".format(type_name))
-            lines.append("        }")
+            root = self.root_of(type_name)
+            cast = "" if type_name == root else "({})".format(type_name)
+            lines.append("        get => {}{}.Wrap({}.AsGodotObject());".format(cast, root, get_call))
             lines.append("        set => Inner.Set(PropertyName.{}, value?.Inner);".format(cs_name))
         elif enum_type is not None:
             lines.append("        get => ({}){}.As<long>();".format(enum_type, get_call))
@@ -207,6 +221,19 @@ class Generator:
 
         if is_root:
             lines.append("    public static implicit operator Variant({} wrapper) => wrapper?.Inner ?? default;".format(cls))
+            lines.append("")
+            lines.append("    /// <summary>Wraps a GDExtension object in the most-derived C# wrapper for its Godot class.</summary>")
+            descendants = self.concrete_descendants(cls)
+            if descendants:
+                lines.append("    public static {} Wrap(GodotObject inner) => inner?.GetClass() switch".format(cls))
+                lines.append("    {")
+                lines.append("        null => null,")
+                for descendant in descendants:
+                    lines.append('        "{}" => new {}(inner),'.format(descendant, descendant))
+                lines.append("        _ => new {}(inner),".format(cls))
+                lines.append("    };")
+            else:
+                lines.append("    public static {} Wrap(GodotObject inner) => inner == null ? null : new {}(inner);".format(cls, cls))
             lines.append("")
 
         for enum, values in spec.get("enums", {}).items():

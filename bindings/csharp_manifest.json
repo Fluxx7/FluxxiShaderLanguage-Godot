@@ -1,32 +1,86 @@
 {
   "namespace": "FluxxiShaderLang",
+  "engine_enums": ["RenderingDevice.UniformType"],
   "classes": {
     "FSLResource": {
       "base": "RefCounted",
-      "abstract": true
+      "abstract": true,
+      "methods": [
+        { "name": "get_rid", "return": "Rid" },
+        { "name": "connect_and_call", "args": [{ "name": "event_handler", "type": "Callable" }] }
+      ],
+      "signals": [
+        { "name": "rid_changed" }
+      ]
     },
     "FSLBuffer": {
       "extends": "FSLResource",
+      "abstract": true
+    },
+    "FSLTexture": {
+      "extends": "FSLResource",
+      "abstract": true
+    },
+    "FSLRawResource": {
+      "extends": "FSLResource",
       "methods": [
-        { "name": "bind_callback", "args": [{ "name": "callback", "type": "Callable" }] },
+        { "name": "from_rid", "static": true, "return": "FSLRawResource", "args": [
+          { "name": "rid", "type": "Rid" },
+          { "name": "uniform_type", "type": "RenderingDevice.UniformType" }
+        ] },
+        { "name": "set_rid", "args": [{ "name": "rid", "type": "Rid" }] },
+        { "name": "set_uniform_type", "args": [{ "name": "uniform_type", "type": "RenderingDevice.UniformType" }] },
+        { "name": "get_uniform_type", "return": "RenderingDevice.UniformType" }
+      ]
+    },
+    "FSLStorageBuffer": {
+      "extends": "FSLBuffer",
+      "methods": [
         { "name": "set_field", "args": [{ "name": "field", "type": "StringName" }, { "name": "value", "type": "Variant" }] },
         { "name": "set_buffer", "args": [{ "name": "values", "type": "Godot.Collections.Dictionary<StringName, Variant>" }] },
         { "name": "set_unsized_element_count", "args": [{ "name": "num_elements", "type": "uint" }] }
       ]
     },
-    "FSLTexture": {
-      "extends": "FSLResource",
+    "FSLUniformBuffer": {
+      "extends": "FSLBuffer",
       "methods": [
-        { "name": "bind_callback", "args": [{ "name": "callback", "type": "Callable" }] },
-        { "name": "set_2d_texture", "csharp": "Set2DTexture", "args": [
+        { "name": "set_field", "args": [{ "name": "field", "type": "StringName" }, { "name": "value", "type": "Variant" }] },
+        { "name": "set_buffer", "args": [{ "name": "values", "type": "Godot.Collections.Dictionary<StringName, Variant>" }] }
+      ]
+    },
+    "FSLVertexBuffer": {
+      "extends": "FSLBuffer"
+    },
+    "FSLIndexBuffer": {
+      "extends": "FSLBuffer",
+      "methods": [
+        { "name": "set_field", "args": [{ "name": "field", "type": "StringName" }, { "name": "value", "type": "Variant" }] },
+        { "name": "set_buffer", "args": [{ "name": "values", "type": "Godot.Collections.Dictionary<StringName, Variant>" }] }
+      ]
+    },
+    "FSLTexture2D": {
+      "extends": "FSLTexture",
+      "methods": [
+        { "name": "set_texture", "args": [
           { "name": "tex_width", "type": "uint" },
           { "name": "tex_height", "type": "uint" },
           { "name": "image", "type": "Image", "default": "null" }
-        ] },
-        { "name": "set_3d_texture", "csharp": "Set3DTexture", "args": [
+        ] }
+      ]
+    },
+    "FSLTexture2DArray": {
+      "extends": "FSLTexture",
+      "methods": [
+        { "name": "set_texture", "args": [
           { "name": "tex_width", "type": "uint" },
           { "name": "tex_height", "type": "uint" },
-          { "name": "tex_depth", "type": "uint" },
+          { "name": "index", "type": "uint" },
+          { "name": "image", "type": "Image", "default": "null" }
+        ] },
+        { "name": "set_textures", "args": [
+          { "name": "tex_width", "type": "uint" },
+          { "name": "tex_height", "type": "uint" },
+          { "name": "tex_count", "type": "uint" },
           { "name": "images", "type": "Godot.Collections.Array<Image>", "default": "null" }
         ] }
       ]
@@ -55,33 +109,13 @@
           { "name": "resource", "type": "FSLResource" },
           { "name": "resource_name", "type": "StringName" }
         ] },
-        { "name": "get_buffer", "return": "FSLBuffer", "args": [{ "name": "buffer_name", "type": "StringName" }] },
-        { "name": "get_texture", "return": "FSLTexture", "args": [{ "name": "texture_name", "type": "StringName" }] },
-        { "name": "buffer_bind_callback", "args": [
-          { "name": "buffer_name", "type": "StringName" },
-          { "name": "callback", "type": "Callable" }
-        ] },
-        { "name": "buffer_set_unsized_element_count", "args": [
-          { "name": "buffer_name", "type": "StringName" },
-          { "name": "element_count", "type": "uint" }
-        ] },
-        { "name": "texture_bind_callback", "args": [
-          { "name": "texture_name", "type": "StringName" },
-          { "name": "callback", "type": "Callable" }
-        ] },
-        { "name": "texture_set_2d", "csharp": "TextureSet2D", "args": [
-          { "name": "texture_name", "type": "StringName" },
-          { "name": "width", "type": "uint" },
-          { "name": "height", "type": "uint" },
-          { "name": "tex", "type": "Image", "default": "null" }
-        ] },
-        { "name": "texture_set_3d", "csharp": "TextureSet3D", "args": [
-          { "name": "texture_name", "type": "StringName" },
-          { "name": "width", "type": "uint" },
-          { "name": "height", "type": "uint" },
-          { "name": "depth", "type": "uint" },
-          { "name": "images", "type": "Godot.Collections.Array<Image>", "default": "null" }
-        ] }
+        { "name": "get_storage_buffer", "return": "FSLStorageBuffer", "args": [{ "name": "buffer_name", "type": "StringName" }] },
+        { "name": "get_uniform_buffer", "return": "FSLUniformBuffer", "args": [{ "name": "buffer_name", "type": "StringName" }] },
+        { "name": "get_vertex_buffer", "return": "FSLVertexBuffer", "args": [{ "name": "buffer_name", "type": "StringName" }] },
+        { "name": "get_index_buffer", "return": "FSLIndexBuffer", "args": [{ "name": "buffer_name", "type": "StringName" }] },
+        { "name": "get_texture_2d", "return": "FSLTexture2D", "args": [{ "name": "texture_name", "type": "StringName" }] },
+        { "name": "get_texture_2d_array", "return": "FSLTexture2DArray", "args": [{ "name": "texture_name", "type": "StringName" }] },
+        { "name": "get_resource", "return": "FSLResource", "args": [{ "name": "resource_name", "type": "StringName" }] }
       ]
     },
     "ComputeGroup": {
@@ -100,33 +134,13 @@
           { "name": "z_invocations", "type": "uint" },
           { "name": "push_constants", "type": "Godot.Collections.Dictionary<StringName, Variant>", "default": "null" }
         ] },
-        { "name": "get_buffer", "return": "FSLBuffer", "args": [{ "name": "buffer_name", "type": "StringName" }] },
-        { "name": "get_texture", "return": "FSLTexture", "args": [{ "name": "texture_name", "type": "StringName" }] },
-        { "name": "buffer_bind_callback", "args": [
-          { "name": "buffer_name", "type": "StringName" },
-          { "name": "callback", "type": "Callable" }
-        ] },
-        { "name": "buffer_set_unsized_element_count", "args": [
-          { "name": "buffer_name", "type": "StringName" },
-          { "name": "element_count", "type": "uint" }
-        ] },
-        { "name": "texture_bind_callback", "args": [
-          { "name": "texture_name", "type": "StringName" },
-          { "name": "callback", "type": "Callable" }
-        ] },
-        { "name": "texture_set_2d", "csharp": "TextureSet2D", "args": [
-          { "name": "texture_name", "type": "StringName" },
-          { "name": "width", "type": "uint" },
-          { "name": "height", "type": "uint" },
-          { "name": "tex", "type": "Image", "default": "null" }
-        ] },
-        { "name": "texture_set_3d", "csharp": "TextureSet3D", "args": [
-          { "name": "texture_name", "type": "StringName" },
-          { "name": "width", "type": "uint" },
-          { "name": "height", "type": "uint" },
-          { "name": "depth", "type": "uint" },
-          { "name": "images", "type": "Godot.Collections.Array<Image>", "default": "null" }
-        ] }
+        { "name": "get_storage_buffer", "return": "FSLStorageBuffer", "args": [{ "name": "buffer_name", "type": "StringName" }] },
+        { "name": "get_uniform_buffer", "return": "FSLUniformBuffer", "args": [{ "name": "buffer_name", "type": "StringName" }] },
+        { "name": "get_vertex_buffer", "return": "FSLVertexBuffer", "args": [{ "name": "buffer_name", "type": "StringName" }] },
+        { "name": "get_index_buffer", "return": "FSLIndexBuffer", "args": [{ "name": "buffer_name", "type": "StringName" }] },
+        { "name": "get_texture_2d", "return": "FSLTexture2D", "args": [{ "name": "texture_name", "type": "StringName" }] },
+        { "name": "get_texture_2d_array", "return": "FSLTexture2DArray", "args": [{ "name": "texture_name", "type": "StringName" }] },
+        { "name": "get_resource", "return": "FSLResource", "args": [{ "name": "resource_name", "type": "StringName" }] }
       ]
     },
     "ComputePlan": {
