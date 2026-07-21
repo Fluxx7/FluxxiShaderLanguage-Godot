@@ -23,27 +23,18 @@ public partial class FSLFile
 
     public static implicit operator Variant(FSLFile wrapper) => wrapper?.Inner ?? default;
 
+    /// <summary>Wraps a GDExtension object in the most-derived C# wrapper for its Godot class.</summary>
+    public static FSLFile Wrap(GodotObject inner) => inner == null ? null : new FSLFile(inner);
+
     public void Test() => Inner.Call(MethodName.Test);
 
-    public static FSLFile FromFile(string filePath)
-    {
-        GodotObject result = ClassDB.ClassCallStatic(GDClassName, MethodName.FromFile, filePath).AsGodotObject();
-        return result == null ? null : new FSLFile(result);
-    }
+    public static FSLFile FromFile(string filePath) => FSLFile.Wrap(ClassDB.ClassCallStatic(GDClassName, MethodName.FromFile, filePath).AsGodotObject());
 
     public string GetKernelSource(StringName kernelName) => Inner.Call(MethodName.GetKernelSource, kernelName).As<string>();
 
-    public ComputeKernel GetKernel(StringName kernelName, RenderingDevice renderingDevice = null)
-    {
-        GodotObject result = Inner.Call(MethodName.GetKernel, kernelName, renderingDevice).AsGodotObject();
-        return result == null ? null : new ComputeKernel(result);
-    }
+    public ComputeKernel GetKernel(StringName kernelName, RenderingDevice renderingDevice = null) => ComputeKernel.Wrap(Inner.Call(MethodName.GetKernel, kernelName, renderingDevice).AsGodotObject());
 
-    public ComputeGroup GetKernelGroup(RenderingDevice renderingDevice = null)
-    {
-        GodotObject result = Inner.Call(MethodName.GetKernelGroup, renderingDevice).AsGodotObject();
-        return result == null ? null : new ComputeGroup(result);
-    }
+    public ComputeGroup GetKernelGroup(RenderingDevice renderingDevice = null) => ComputeGroup.Wrap(Inner.Call(MethodName.GetKernelGroup, renderingDevice).AsGodotObject());
 
     public static class MethodName
     {

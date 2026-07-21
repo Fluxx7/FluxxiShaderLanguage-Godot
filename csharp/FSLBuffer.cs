@@ -12,22 +12,4 @@ public partial class FSLBuffer : FSLResource
     public new static readonly StringName GDClassName = "FSLBuffer";
 
     public FSLBuffer(GodotObject inner) : base(inner) { }
-
-    public FSLBuffer() : this(ClassDB.Instantiate(GDClassName).AsGodotObject()) { }
-
-    public void BindCallback(Callable callback) => Inner.Call(MethodName.BindCallback, callback);
-
-    public void SetField(StringName field, Variant value) => Inner.Call(MethodName.SetField, field, value);
-
-    public void SetBuffer(Godot.Collections.Dictionary<StringName, Variant> values) => Inner.Call(MethodName.SetBuffer, values);
-
-    public void SetUnsizedElementCount(uint numElements) => Inner.Call(MethodName.SetUnsizedElementCount, numElements);
-
-    public static class MethodName
-    {
-        public static readonly StringName BindCallback = "bind_callback";
-        public static readonly StringName SetField = "set_field";
-        public static readonly StringName SetBuffer = "set_buffer";
-        public static readonly StringName SetUnsizedElementCount = "set_unsized_element_count";
-    }
 }

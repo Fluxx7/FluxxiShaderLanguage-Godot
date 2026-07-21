@@ -23,39 +23,30 @@ public partial class ComputeGroup
 
     public static implicit operator Variant(ComputeGroup wrapper) => wrapper?.Inner ?? default;
 
+    /// <summary>Wraps a GDExtension object in the most-derived C# wrapper for its Godot class.</summary>
+    public static ComputeGroup Wrap(GodotObject inner) => inner == null ? null : new ComputeGroup(inner);
+
     public void PrintInfo() => Inner.Call(MethodName.PrintInfo);
 
-    public ComputeKernel GetKernel(StringName kernelName)
-    {
-        GodotObject result = Inner.Call(MethodName.GetKernel, kernelName).AsGodotObject();
-        return result == null ? null : new ComputeKernel(result);
-    }
+    public ComputeKernel GetKernel(StringName kernelName) => ComputeKernel.Wrap(Inner.Call(MethodName.GetKernel, kernelName).AsGodotObject());
 
     public void AssignResource(FSLResource resource, StringName resourceName) => Inner.Call(MethodName.AssignResource, resource?.Inner, resourceName);
 
     public void Dispatch(StringName kernelName, uint xInvocations, uint yInvocations, uint zInvocations, Godot.Collections.Dictionary<StringName, Variant> pushConstants = null) => Inner.Call(MethodName.Dispatch, kernelName, xInvocations, yInvocations, zInvocations, pushConstants ?? new Godot.Collections.Dictionary<StringName, Variant>());
 
-    public FSLBuffer GetBuffer(StringName bufferName)
-    {
-        GodotObject result = Inner.Call(MethodName.GetBuffer, bufferName).AsGodotObject();
-        return result == null ? null : new FSLBuffer(result);
-    }
+    public FSLStorageBuffer GetStorageBuffer(StringName bufferName) => (FSLStorageBuffer)FSLResource.Wrap(Inner.Call(MethodName.GetStorageBuffer, bufferName).AsGodotObject());
 
-    public FSLTexture GetTexture(StringName textureName)
-    {
-        GodotObject result = Inner.Call(MethodName.GetTexture, textureName).AsGodotObject();
-        return result == null ? null : new FSLTexture(result);
-    }
+    public FSLUniformBuffer GetUniformBuffer(StringName bufferName) => (FSLUniformBuffer)FSLResource.Wrap(Inner.Call(MethodName.GetUniformBuffer, bufferName).AsGodotObject());
 
-    public void BufferBindCallback(StringName bufferName, Callable callback) => Inner.Call(MethodName.BufferBindCallback, bufferName, callback);
+    public FSLVertexBuffer GetVertexBuffer(StringName bufferName) => (FSLVertexBuffer)FSLResource.Wrap(Inner.Call(MethodName.GetVertexBuffer, bufferName).AsGodotObject());
 
-    public void BufferSetUnsizedElementCount(StringName bufferName, uint elementCount) => Inner.Call(MethodName.BufferSetUnsizedElementCount, bufferName, elementCount);
+    public FSLIndexBuffer GetIndexBuffer(StringName bufferName) => (FSLIndexBuffer)FSLResource.Wrap(Inner.Call(MethodName.GetIndexBuffer, bufferName).AsGodotObject());
 
-    public void TextureBindCallback(StringName textureName, Callable callback) => Inner.Call(MethodName.TextureBindCallback, textureName, callback);
+    public FSLTexture2D GetTexture2D(StringName textureName) => (FSLTexture2D)FSLResource.Wrap(Inner.Call(MethodName.GetTexture2D, textureName).AsGodotObject());
 
-    public void TextureSet2D(StringName textureName, uint width, uint height, Image tex = null) => Inner.Call(MethodName.TextureSet2D, textureName, width, height, tex);
+    public FSLTexture2DArray GetTexture2DArray(StringName textureName) => (FSLTexture2DArray)FSLResource.Wrap(Inner.Call(MethodName.GetTexture2DArray, textureName).AsGodotObject());
 
-    public void TextureSet3D(StringName textureName, uint width, uint height, uint depth, Godot.Collections.Array<Image> images = null) => Inner.Call(MethodName.TextureSet3D, textureName, width, height, depth, images ?? new Godot.Collections.Array<Image>());
+    public FSLResource GetResource(StringName resourceName) => FSLResource.Wrap(Inner.Call(MethodName.GetResource, resourceName).AsGodotObject());
 
     public static class MethodName
     {
@@ -63,12 +54,12 @@ public partial class ComputeGroup
         public static readonly StringName GetKernel = "get_kernel";
         public static readonly StringName AssignResource = "assign_resource";
         public static readonly StringName Dispatch = "dispatch";
-        public static readonly StringName GetBuffer = "get_buffer";
-        public static readonly StringName GetTexture = "get_texture";
-        public static readonly StringName BufferBindCallback = "buffer_bind_callback";
-        public static readonly StringName BufferSetUnsizedElementCount = "buffer_set_unsized_element_count";
-        public static readonly StringName TextureBindCallback = "texture_bind_callback";
-        public static readonly StringName TextureSet2D = "texture_set_2d";
-        public static readonly StringName TextureSet3D = "texture_set_3d";
+        public static readonly StringName GetStorageBuffer = "get_storage_buffer";
+        public static readonly StringName GetUniformBuffer = "get_uniform_buffer";
+        public static readonly StringName GetVertexBuffer = "get_vertex_buffer";
+        public static readonly StringName GetIndexBuffer = "get_index_buffer";
+        public static readonly StringName GetTexture2D = "get_texture_2d";
+        public static readonly StringName GetTexture2DArray = "get_texture_2d_array";
+        public static readonly StringName GetResource = "get_resource";
     }
 }
