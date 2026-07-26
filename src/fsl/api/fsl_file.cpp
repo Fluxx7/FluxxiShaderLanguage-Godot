@@ -2,8 +2,6 @@
 #include "godot_cpp/classes/file_access.hpp"
 #include "console_string.h"
 
-void print_shader_info(fslAST &currAst);
-
 void print_operation(const Operation& op, ConsoleString& output);
 void print_expression(const Expression& expression, ConsoleString &output);
 void print_resource_node(ResourceNode& resource_node, ConsoleString &output);
@@ -15,7 +13,6 @@ void print_func_decl(FunctionDecl& func_decl, ConsoleString &output);
 
 /******** STATIC METHODS *********/
 void FSLFile::_bind_methods() {
-    ClassDB::bind_method(D_METHOD("test"), &FSLFile::test);
     ClassDB::bind_method(D_METHOD("print_AST"), &FSLFile::print_AST);
     ClassDB::bind_method(D_METHOD("get_kernel_source", "kernel_name"), &FSLFile::get_kernel_source);
     ClassDB::bind_method(D_METHOD("get_kernel", "kernel_name", "rendering_device"), &FSLFile::get_kernel, DEFVAL(nullptr));
@@ -75,98 +72,8 @@ Ref<ComputeGroup> FSLFile::get_kernel_group(RenderingDevice *rd) {
 	return compute_group;
 }
 
-void FSLFile::test() {
-	print_shader_info(currAst);
-}
-
 /******** HELPERS *********/
 
-void _print_scope(ScopeNode &block);
-void _print_operation(const Operation& op) {
-    std::visit(overload{
-        [&](VariableDecl var_decl) {
-            printvf("VariableDecl");
-        },
-        [&](Operator oper) {
-            printvf("Operator");
-        },
-        [&](FuncCall func_call) {
-            printvf("FuncCall");
-        },
-        [&](VariableRef var_ref) {
-            printvf("VariableRef");
-        },
-        [&](Literal literal) {
-            printvf("Literal");
-        },
-        [&](FieldAccess field_access) {
-            printvf("FieldAccess");
-        },
-        [&](ArrayIndex array_index) {
-            printvf("ArrayIndex");
-        },
-        [&](OperationList op_list) {
-            printvf("OperationList");
-        },
-        [&](UnknownOp error_op) {
-            printvf("UnknownOp");
-        }
-    }, op);
-}
-
-void _print_expression(const Expression &expression) {
-    std::visit(overload{
-        [&](Operation op_expression) {
-            _print_operation(op_expression);
-        },
-        [&](IfNode if_node) {
-            printvf("If statement");
-        },
-        [&](ElseNode else_node) {
-            printvf("Else statement");
-        },
-        [&](ForNode for_node) {
-            printvf("For statement");
-        },
-        [&](ScopeNode subblock) {
-            printvf("{");
-            _print_scope(subblock);
-            printvf("}");
-        },
-        [&](FunctionDecl func_decl) {
-            printvf("Function declaration");
-        },
-        [&](ReturnExpression ret_expr) {
-            printvf("Return");
-        }
-    }, expression);
-}
-
-void _print_scope(ScopeNode &block) {
-    for (const auto &expr : block.body) {
-        _print_expression(expr);
-    }
-}
-
-void _print_resource(ResourceNode &resource) {
-    print_line(vformat("\nResource %s:", resource.name));
-    std::visit(overload{
-        [&](BufferDef &buffer)          { 
-            printvf("\t%s", get_buffer_desc(buffer.buftype, buffer.layout));
-            print_line("\tBuffer fields:");
-            for (auto field : buffer.fields) {
-                print_line(vformat("\t\tName: %s, type: %s", field.name, typeref_to_string(field.type)));
-            }
-        },
-        [&](TextureDef &texture) { 
-            String tex_format = texture.format == RGBA16F ? "rgba16f" : "rgba32f";
-            print_line(vformat("\tTexture of type %s with format %s", tex_to_glsl_name(texture.type), tex_format));
-        },
-        [&](VariableDecl &uniform)  {
-            print_line("How the fuck");
-        }
-    }, resource.resource);
-}
 
 void FSLFile::load_shader() {
     auto ast_out = FSLParser::get_ast(path);
@@ -176,41 +83,6 @@ void FSLFile::load_shader() {
     }
     currAst = std::move(*ast_out);
     compute_kernels = CodeBuilder::get_kernels(currAst);
-}
-
-void print_shader_info(fslAST &currAst) {
-    for (GlobalDeclaration &decl : currAst.contents) {
-        std::visit(overload{
-            [&](Expression &expression)          { 
-                print_line("\nShared code:");
-                _print_expression(expression);
-            },
-            [&](KernelNode &kernel)      { 
-                print_line("\nKernel " + kernel.name + ":");
-                // print_line(vformat("Local threads: %d, %d, %d", tokens_to_string(kernel.local_x_threads).to_int(), tokens_to_string(kernel.local_y_threads).to_int(), tokens_to_string(kernel.local_z_threads).to_int()));
-                if (kernel.name_bindings.size() > 0) {
-                    print_line("Name bindings:");
-                    for (auto [bound_name, orig_name] : kernel.name_bindings) {
-                        print_line(vformat("\tBound name: %s, original name: %s", bound_name, orig_name));
-                    }
-                }
-                if (kernel.push_constants.size() > 0) {
-                    print_line("Push constants:");
-                    for (auto &push_constant : kernel.push_constants) {
-                        print_line(vformat("\tName: %s, type: %s", push_constant.name, typeref_to_string(push_constant.type)));
-                    }
-                }
-                printvf("Code:");
-                _print_scope(kernel.code);
-            },
-            [&](ResourceNode &resource)  {
-                _print_resource(resource);
-            },
-            [&](FunctionDecl &func) {
-
-            }
-        }, decl.value);
-    }
 }
 
 

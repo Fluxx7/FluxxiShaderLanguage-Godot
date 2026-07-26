@@ -43,5 +43,4 @@ public:
     static Ref<FSLFile> from_file(String file_path);
     
     void print_AST();
-    void test();
 };

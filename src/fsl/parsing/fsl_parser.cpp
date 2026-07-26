@@ -1,5 +1,6 @@
 #include "fsl_parser.h"
 #include "../api/console_string.h"
+#include "fsl_validator.h"
 
 int32_t is_type(String identifier) {
     static const char *types[] = {
@@ -314,7 +315,7 @@ Expression FSLParser::_parse_expression(TokenStream &&stream, bool is_global) {
         case Token::KEYWORD_IF: {
             stream.consume();
             uint32_t if_start = stream.get_index();
-            uint32_t if_len = 1;
+            uint32_t if_len = 0;
             while (!stream.at_end() && stream.peek().get_type() != Token::SYMBOL_LEFTBRACE && stream.peek().get_type() != Token::SYMBOL_SEMICOLON) {
                 if_len++;
                 stream.consume();
@@ -325,7 +326,7 @@ Expression FSLParser::_parse_expression(TokenStream &&stream, bool is_global) {
         case Token::KEYWORD_ELSE: {
             stream.consume();
             uint32_t else_start = stream.get_index();
-            uint32_t else_len = 1;
+            uint32_t else_len = 0;
             while (!stream.at_end() && stream.peek().get_type() != Token::SYMBOL_LEFTBRACE && stream.peek().get_type() != Token::SYMBOL_SEMICOLON) {
                 else_len++;
                 stream.consume();
@@ -336,7 +337,7 @@ Expression FSLParser::_parse_expression(TokenStream &&stream, bool is_global) {
         case Token::KEYWORD_FOR: {
             stream.consume();
             uint32_t for_start = stream.get_index();
-            uint32_t for_len = 1;
+            uint32_t for_len = 0;
             while (!stream.at_end() && stream.peek().get_type() != Token::SYMBOL_LEFTBRACE && stream.peek().get_type() != Token::SYMBOL_SEMICOLON) {
                 for_len++;
                 stream.consume();
@@ -966,10 +967,6 @@ LocalVector<TokenTree> FSLParser::_collect_scopes(Span<Token> tokens) {
 	return out_tokens;
 }
 
-bool FSLParser::validate_ast(const fslAST &ast) {
-	return true;
-}
-
 std::optional<fslAST> FSLParser::get_ast(String path) {
     auto ast = fslAST();
 
@@ -982,7 +979,9 @@ std::optional<fslAST> FSLParser::get_ast(String path) {
 
     LocalVector<TokenTree> tree = parser._collect_scopes(ast.tokens.span());
     parser._parse_file(ast, tree.span());
-    if (!parser.validate_ast(ast)) {
+
+    FSLValidator validator;
+    if (!validator.validate_ast(ast)) {
         return {};
     }
 	return std::move(ast);

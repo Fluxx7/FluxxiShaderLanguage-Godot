@@ -114,7 +114,6 @@ public:
     std::optional<String> error;
     HashMap<StringName, KernelNode> kernel_data;
     std::optional<LocalVector<Token>> _preprocess(String& path);
-    bool validate_ast(const fslAST& ast);
     
     static std::optional<fslAST> get_ast(String path);
 };
