@@ -73,17 +73,16 @@ std::optional<Ref<FileAccess>> load_file(String &path) {
 TypeRef FSLParser::_parse_type(TokenStream& stream) {
     TypeRef new_type;
     while (stream.peek().get_category() == Token::CATEGORY_SPECIFIER) {
-        new_type.type.push_back(stream.consume().get_token());
+        new_type.specifiers.push_back(stream.consume().get_token());
     } 
     auto& type_name = stream.peek();
     if (!stream.expect(Token::IDENTIFIER)) {
         print_fsl_err_expected_tok("type name", type_name);
     }
-    new_type.type.push_back(type_name.get_token());
+    new_type.type = type_name.get_token();
     auto array_scope = stream.descend_bracket(false);
     while (array_scope.has_value()) {
-        auto& array_stream = *array_scope;
-        new_type.array_dims.push_back(_parse_statement(std::move(*array_scope)));
+        new_type.array_dims.push_back(_parse_operation(std::move(*array_scope)));
         array_scope = stream.descend_bracket(false);
     }
 	return new_type;
@@ -107,32 +106,279 @@ VariableDecl FSLParser::_parse_var_decl(TokenStream &&stream) {
 	return new_var;
 }
 
-Statement FSLParser::_parse_statement(TokenStream &&stream, bool is_global) {
-	Statement new_statement;
+Operation FSLParser::_parse_op_segment(TokenStream &stream) {
+    enum ExpectedOp {
+        UNKNOWN,
+        VARDECL,
+        FUNCCALL,
+        VARREF,
+        OPER,
+        LITERAL,
+        FIELDACC,
+        ARRINDEX,
+        SUBOP
+    };
+    TokenStream check_stream = stream.trim();
+    ExpectedOp op_type = UNKNOWN;
+
+    // Determine operation type
+    auto& first_token = check_stream.consume();
+    switch (first_token.get_category()) {
+        case Token::CATEGORY_SPECIFIER:
+                op_type = VARDECL;
+                break;
+        case Token::CATEGORY_IDENTIFIER:{
+            auto next_type = check_stream.peek().get_type();
+            if (next_type == Token::IDENTIFIER) {
+                op_type = VARDECL;
+                break;
+            }
+            if (next_type == Token::SYMBOL_LEFTBRACKET) {
+                check_stream.consume();
+                while (check_stream.expect(Token::SYMBOL_LEFTBRACKET));
+                if (check_stream.peek().get_type() == Token::IDENTIFIER) {
+                    op_type = VARDECL;
+                } else {
+                    op_type = VARREF;
+                }
+                break;
+            }
+            if (next_type == Token::SYMBOL_LEFTPAREN && !check_stream.peek().has_leading_whitespace()) {
+                op_type = FUNCCALL;
+                break;
+            }
+            op_type = VARREF;
+            break;
+        }
+        case Token::CATEGORY_SYMBOL_OP: {
+            op_type = OPER;
+            break;
+        }
+        case Token::CATEGORY_NUMBER:
+            op_type = LITERAL;
+            break;
+        case Token::CATEGORY_SYMBOL_OTHER: {
+            if (first_token.get_type() == Token::SYMBOL_PERIOD && !first_token.has_leading_whitespace()) {
+                op_type = FIELDACC;
+                break;
+            }
+            if (first_token.get_type() == Token::SYMBOL_LEFTPAREN) {
+                op_type = SUBOP;
+                break;
+            }
+            if (first_token.get_type() == Token::SYMBOL_LEFTBRACKET && !first_token.has_leading_whitespace()) {
+                op_type = ARRINDEX;
+                break;
+            }
+        }
+        default:
+            break;
+    }
+
+    // return associated node
+    switch (op_type) {
+        case VARDECL: {
+            uint32_t var_decl_start = stream.get_index();
+            uint32_t var_decl_len = 0;
+            while (!stream.at_end()) {
+                auto& token = stream.peek();
+                switch (token.get_category()) {
+                    case Token::CATEGORY_SPECIFIER:
+                    case Token::CATEGORY_IDENTIFIER:
+                        stream.consume();
+                        var_decl_len++;
+                        break;
+                    default:
+                        if (token.get_type() == Token::SYMBOL_LEFTBRACKET) {
+                            stream.consume(); 
+                            var_decl_len++;
+                            break;
+                        } else {
+                            return _parse_var_decl(stream.get_slice(var_decl_start, var_decl_len));
+                        }  
+                }
+            }
+            return _parse_var_decl(stream.get_slice(var_decl_start, var_decl_len));
+        } break;
+
+        case FUNCCALL: {
+            FuncCall new_func_call;
+            new_func_call.name = stream.consume().get_contents();
+            auto new_func_scope = stream.descend_paren();
+            if (!new_func_scope.has_value()) {
+                new_func_call.is_valid = false;
+                return new_func_call;
+            }
+            auto& new_func_stream = *new_func_scope;
+            while (!new_func_stream.at_end()) {
+                Statement new_func_arg;
+                uint32_t arg_start = new_func_stream.get_index();
+                uint32_t arg_len = 0;
+                new_func_stream.consume_until<Token::SYMBOL_COMMA>([&](){
+                    arg_len++;
+                });
+                new_func_call.args.push_back(_parse_operation(new_func_stream.get_slice(arg_start, arg_len)));
+            }
+            return new_func_call;
+        }
+
+        case SUBOP: {
+            auto sub_scope = stream.descend_paren();
+            if (!sub_scope.has_value()) {
+                OperationList fail_list;
+                fail_list.is_valid = false;
+                return fail_list;
+            }
+            return _parse_operation(std::move(*sub_scope));
+        }
+
+        case VARREF: {
+            VariableRef var_ref;
+            var_ref.name = stream.consume().get_contents();
+            return var_ref;
+        }
+
+        case LITERAL: {
+            // are any literals other than numerical literals needed for a shader language?
+            Literal literal;
+            literal.value += stream.consume().get_contents();
+            while(!stream.at_end()) {
+                auto& token = stream.peek();
+                if ((token.get_type() == Token::SYMBOL_PERIOD || token.get_category() == Token::CATEGORY_NUMBER) && !token.has_leading_whitespace()) {
+                    literal.value += stream.consume().get_contents();
+                } else {
+                    break;
+                }
+            }
+            return literal;
+        }
+
+        case ARRINDEX: {
+            ArrayIndex arr_index;
+            auto index_scope = stream.descend_bracket();
+            while (index_scope.has_value()) {
+                arr_index.indices.push_back(_parse_operation(std::move(*index_scope)));
+                index_scope = stream.descend_bracket();
+            }
+            return arr_index;
+        }
+
+        case OPER: {
+            Operator op;
+            String op_str = "";
+            op_str += stream.consume().get_contents();
+            while(!stream.at_end()) {
+                if (stream.peek().get_category() == Token::CATEGORY_SYMBOL_OP && !stream.peek().has_leading_whitespace()) {
+                    op_str += stream.consume().get_contents();
+                } else {
+                    break;
+                }
+            }
+            op.symbol = op_str;
+            return op;
+        }
+
+        case FIELDACC: {
+            FieldAccess field_access;
+            stream.consume();
+            if(stream.peek().get_category() != Token::CATEGORY_IDENTIFIER) {
+                field_access.is_valid = false;
+                return field_access;
+            }
+            field_access.field_name = stream.consume().get_contents();
+            return field_access;
+        }
+
+
+
+        default:
+            UnknownOp fail_ref;
+            fail_ref.is_valid = false;
+            while(!stream.at_end()) {
+                fail_ref.code.push_back(stream.consume());
+            }
+            return fail_ref;
+    }
+}
+
+OperationList FSLParser::_parse_operation(TokenStream &&stream) {
+    OperationList new_op_list;
     while (!stream.at_end()) {
+        new_op_list.operations.push_back(_parse_op_segment(stream));
+    }
+	return new_op_list;
+}
+
+Expression FSLParser::_parse_expression(TokenStream &&stream, bool is_global) {
+	switch(stream.peek().get_type()) {
+        case Token::KEYWORD_IF: {
+            stream.consume();
+            uint32_t if_start = stream.get_index();
+            uint32_t if_len = 1;
+            while (!stream.at_end() && stream.peek().get_type() != Token::SYMBOL_LEFTBRACE && stream.peek().get_type() != Token::SYMBOL_SEMICOLON) {
+                if_len++;
+                stream.consume();
+            }
+            stream.consume();
+            return _parse_if_statement(stream.get_slice(if_start, if_len));
+        } break;
+        case Token::KEYWORD_ELSE: {
+            stream.consume();
+            uint32_t else_start = stream.get_index();
+            uint32_t else_len = 1;
+            while (!stream.at_end() && stream.peek().get_type() != Token::SYMBOL_LEFTBRACE && stream.peek().get_type() != Token::SYMBOL_SEMICOLON) {
+                else_len++;
+                stream.consume();
+            }
+            stream.consume();
+            return _parse_else_statement(stream.get_slice(else_start, else_len));
+        } break;
+        case Token::KEYWORD_FOR: {
+            stream.consume();
+            uint32_t for_start = stream.get_index();
+            uint32_t for_len = 1;
+            while (!stream.at_end() && stream.peek().get_type() != Token::SYMBOL_LEFTBRACE && stream.peek().get_type() != Token::SYMBOL_SEMICOLON) {
+                for_len++;
+                stream.consume();
+            }
+            stream.consume();
+            return _parse_for_statement(stream.get_slice(for_start, for_len));
+        } break;
+        case Token::KEYWORD_RETURN: {
+            ReturnExpression ret_expr;
+            stream.consume();
+            ret_expr.return_val = _parse_operation(stream.trim());
+            return ret_expr;
+        }
+        case Token::SYMBOL_LEFTBRACE: {
+            auto brace_scope = stream.descend_brace();
+            return _parse_brace_scope(std::move(*brace_scope));
+        } break;
+        default:
+            break;
+    }
+    uint32_t substream_start = stream.get_index();
+    uint32_t substream_len = 0;
+    bool is_function = false;
+    while(!stream.at_end()) {
         switch(stream.peek().get_type()) {
-            case Token::SYMBOL_LEFTPAREN: {
-                auto paren_scope = stream.expect_scope_paren();
-                if (paren_scope == nullptr) {
-                    print_fsl_err_unexpected_tok("statement", stream.peek());
-                    return new_statement; 
-                }
-                _parse_paren_scope(paren_scope, new_statement);
-            } break;
-            case Token::SYMBOL_LEFTBRACKET: {
-                auto bracket_scope = stream.expect_scope_bracket();
-                if (bracket_scope == nullptr) {
-                    print_fsl_err_unexpected_tok("statement", stream.peek());
-                    return new_statement; 
-                }
-                _parse_bracket_scope(bracket_scope, new_statement);
-            } break;
+            case Token::SYMBOL_LEFTBRACE:
+                substream_len++;
+                stream.consume();
+                is_function = true;
+                break;
             default:
-                new_statement.push_back(stream.consume());
+                substream_len++;
+                stream.consume();
                 break;
         }
     }
-    return new_statement;
+    auto subslice = stream.get_slice(substream_start, substream_len);
+    if (is_function) {
+        return _parse_func_decl(subslice);
+    } else {
+        return _parse_operation(subslice);
+    }
 }
 
 IfNode FSLParser::_parse_if_statement(TokenStream &&stream) {
@@ -148,19 +394,12 @@ IfNode FSLParser::_parse_if_statement(TokenStream &&stream) {
         return err_if();
     }
 
-    new_if.cond = _parse_statement(std::move(*args_scope));
+    new_if.cond = _parse_operation(std::move(*args_scope));
 
     auto body_scope = stream.descend_brace();
     if (!body_scope.has_value()) {
         ScopeNode body_node;
-
-        uint32_t statement_start = stream.get_index();
-        uint32_t statement_len = 0;
-        while (!stream.at_end()) {
-            statement_len++;
-            stream.consume();
-        }
-        body_node.body.push_back(_parse_statement(stream.get_slice(statement_start, statement_len)));
+        body_node.body.push_back(_parse_expression(stream.trim()));
         new_if.body = body_node;
         return new_if;
     }
@@ -187,14 +426,7 @@ ElseNode FSLParser::_parse_else_statement(TokenStream &&stream) {
     auto body_scope = stream.descend_brace();
     if (!body_scope.has_value()) {
         ScopeNode body_node;
-
-        uint32_t statement_start = stream.get_index();
-        uint32_t statement_len = 0;
-        while (!stream.at_end()) {
-            statement_len++;
-            stream.consume();
-        }
-        body_node.body.push_back(_parse_statement(stream.get_slice(statement_start, statement_len)));
+        body_node.body.push_back(_parse_expression(stream.trim()));
         new_else.body = body_node;
         return new_else;
     }
@@ -224,7 +456,7 @@ ForNode FSLParser::_parse_for_statement(TokenStream &&stream) {
             print_fsl_err_expected_tok_loc("\';\'", "in `for` statement", args_stream.peek());
             return err_for();
         }
-        new_for.init = _parse_statement(args_stream.get_slice(statement_start, statement_len));
+        new_for.init = _parse_operation(args_stream.get_slice(statement_start, statement_len));
 
         statement_start = args_stream.get_index();
         statement_len = 0;
@@ -234,7 +466,7 @@ ForNode FSLParser::_parse_for_statement(TokenStream &&stream) {
             print_fsl_err_expected_tok_loc("\';\'", "in `for` statement", args_stream.peek());
             return err_for();
         }
-        new_for.cond = _parse_statement(args_stream.get_slice(statement_start, statement_len));
+        new_for.cond = _parse_operation(args_stream.get_slice(statement_start, statement_len));
 
         statement_start = args_stream.get_index();
         statement_len = 0;
@@ -242,20 +474,13 @@ ForNode FSLParser::_parse_for_statement(TokenStream &&stream) {
             statement_len++;
             args_stream.consume();
         }
-        new_for.post = _parse_statement(args_stream.get_slice(statement_start, statement_len));
+        new_for.post = _parse_operation(args_stream.get_slice(statement_start, statement_len));
     }
 
     auto body_scope = stream.descend_brace();
     if (!body_scope.has_value()) {
         ScopeNode body_node;
-
-        uint32_t statement_start = stream.get_index();
-        uint32_t statement_len = 0;
-        while (!stream.at_end()) {
-            statement_len++;
-            stream.consume();
-        }
-        body_node.body.push_back(_parse_statement(stream.get_slice(statement_start, statement_len)));
+        body_node.body.push_back(_parse_expression(stream.trim()));
         new_for.body = body_node;
         return new_for;
     }
@@ -281,80 +506,37 @@ ScopeNode FSLParser::_parse_brace_scope(TokenStream &&stream) {
         new_scope.is_valid = false;
         return new_scope;
     };
-    uint32_t next_statement_start = 0;
-    uint32_t next_statement_len = 0;
-    auto flush_statement = [&](){
-        if (next_statement_len != 0) {
-            new_scope.body.push_back(_parse_statement(stream.get_slice(next_statement_start, next_statement_len)));
-            next_statement_start = stream.get_index();
-            next_statement_len = 0;
+    uint32_t next_expression_start = 0;
+    uint32_t next_expression_len = 0;
+    auto flush_expression = [&](){
+        if (next_expression_len != 0) {
+            new_scope.body.push_back(_parse_expression(stream.get_slice(next_expression_start, next_expression_len)));
+            next_expression_start = stream.get_index();
+            next_expression_len = 0;
         }
     };
-    auto push_statement = [&](){
-        if (next_statement_len == 0) {
-            next_statement_start = stream.get_index();
+    auto push_expression = [&](){
+        if (next_expression_len == 0) {
+            next_expression_start = stream.get_index();
         }
-        next_statement_len++;
+        next_expression_len++;
     };
 
     while (!stream.at_end()) {
         switch(stream.peek().get_type()) {
+            case Token::SYMBOL_LEFTBRACE:
+                push_expression();
             case Token::SYMBOL_SEMICOLON:
-                flush_statement();
+                flush_expression();
                 stream.consume();
                 break;
-            case Token::KEYWORD_IF: {
-                flush_statement();
-                stream.consume();
-                uint32_t if_start = stream.get_index();
-                uint32_t if_len = 1;
-                while (!stream.at_end() && stream.peek().get_type() != Token::SYMBOL_LEFTBRACE && stream.peek().get_type() != Token::SYMBOL_SEMICOLON) {
-                    if_len++;
-                    stream.consume();
-                }
-                stream.consume();
-                new_scope.body.push_back(_parse_if_statement(stream.get_slice(if_start, if_len)));
-            } break;
-            case Token::KEYWORD_ELSE: {
-                flush_statement();
-                stream.consume();
-                uint32_t else_start = stream.get_index();
-                uint32_t else_len = 1;
-                while (!stream.at_end() && stream.peek().get_type() != Token::SYMBOL_LEFTBRACE && stream.peek().get_type() != Token::SYMBOL_SEMICOLON) {
-                    else_len++;
-                    stream.consume();
-                }
-                stream.consume();
-                new_scope.body.push_back(_parse_else_statement(stream.get_slice(else_start, else_len)));
-            } break;
-            case Token::KEYWORD_FOR: {
-                flush_statement();
-                stream.consume();
-                uint32_t for_start = stream.get_index();
-                uint32_t for_len = 1;
-                while (!stream.at_end() && stream.peek().get_type() != Token::SYMBOL_LEFTBRACE && stream.peek().get_type() != Token::SYMBOL_SEMICOLON) {
-                    for_len++;
-                    stream.consume();
-                }
-                stream.consume();
-                new_scope.body.push_back(_parse_for_statement(stream.get_slice(for_start, for_len)));
-            } break;
-            case Token::SYMBOL_LEFTBRACE: {
-                flush_statement();
-                auto brace_scope = stream.descend_brace();
-                if (!brace_scope.has_value()) {
-                    print_fsl_err_unexpected_tok("statement", stream.peek());
-                    return err_scope(); 
-                }
-                new_scope.body.push_back(_parse_brace_scope(std::move(*brace_scope)));
-            } break;
             default:
-                push_statement();
+                push_expression();
                 stream.consume();
                 break;
         }
     }
-    flush_statement();
+    flush_expression();
 	return new_scope;
 
 }
@@ -373,6 +555,8 @@ FunctionDecl FSLParser::_parse_func_decl(Slice<TokenTree> tokens) {
         print_fsl_err_expected_tok_loc("valid identifier", "in function declaration", stream.peek());
         return err_func();
     }
+
+    new_func.name = name_token.get_contents();
 
     {
         auto arg_scope = stream.descend_paren();
@@ -558,21 +742,26 @@ KernelNode FSLParser::_parse_kernel(Slice<TokenTree> tokens) {
     }
     {
         auto& layout_stream = *layout_scope;
-        if(!layout_stream.consume_until<Token::SYMBOL_COMMA>([&](const Token* token){ 
-            new_kernel.local_x_threads.push_back(token); 
+        uint32_t next_thread_size_start = layout_stream.get_index();
+        uint32_t next_thread_size_len = 0;
+        if(!layout_stream.consume_until<Token::SYMBOL_COMMA>([&](){ 
+            next_thread_size_len++;
         })) {
             print_fsl_err_expected_tok_loc(",", "in kernel size declaration", layout_stream.peek());
             return err_kernel();
         }
-        if(!layout_stream.consume_until<Token::SYMBOL_COMMA>([&](const Token* token){ 
-            new_kernel.local_y_threads.push_back(token); 
+        new_kernel.local_x_threads = _parse_operation(layout_stream.get_slice(next_thread_size_start, next_thread_size_len));
+
+        next_thread_size_start = layout_stream.get_index();
+        next_thread_size_len = 0;
+        if(!layout_stream.consume_until<Token::SYMBOL_COMMA>([&](){ 
+            next_thread_size_len++;
         })) {
             print_fsl_err_expected_tok_loc(",", "in kernel size declaration", layout_stream.peek());
             return err_kernel();
         }
-        while(!layout_stream.at_end()) {
-            new_kernel.local_z_threads.push_back(layout_stream.consume()); 
-        }
+        new_kernel.local_y_threads = _parse_operation(layout_stream.get_slice(next_thread_size_start, next_thread_size_len));
+        new_kernel.local_z_threads = _parse_operation(layout_stream.trim());
     }
 
     auto& kernel_name = stream.peek();
@@ -640,27 +829,29 @@ KernelNode FSLParser::_parse_kernel(Slice<TokenTree> tokens) {
 
 void FSLParser::_parse_file(fslAST &ast, Span<TokenTree> tokens) {
     auto stream = TokenStream(tokens, 0, tokens.size());
-    uint32_t next_statement_start = 0;
-    uint32_t next_statement_len = 0;
-    auto flush_statement = [&](){
-        if (next_statement_len != 0) {
-            ast.contents.push_back({_parse_statement(stream.get_slice(next_statement_start, next_statement_len))});
-            next_statement_start = stream.get_index();
-            next_statement_len = 0;
+    uint32_t next_expression_start = 0;
+    uint32_t next_expression_len = 0;
+    auto flush_expression = [&](){
+        if (next_expression_len != 0) {
+            GlobalDeclaration new_global_decl;
+            new_global_decl.value = _parse_expression(stream.get_slice(next_expression_start, next_expression_len));
+            ast.contents.push_back(new_global_decl);
+            next_expression_start = stream.get_index();
+            next_expression_len = 0;
         }
     };
-    auto push_statement = [&](){
-        if (next_statement_len == 0) {
-            next_statement_start = stream.get_index();
+    auto push_expression = [&](){
+        if (next_expression_len == 0) {
+            next_expression_start = stream.get_index();
         }
-        next_statement_len++;
+        next_expression_len++;
     };
 
     while (!stream.at_end()) {
         auto& token = stream.peek();
         switch(token.get_type()) {
             case Token::KEYWORD_KERNEL: {
-                flush_statement();
+                flush_expression();
                 stream.consume();
                 auto kernel_start = stream.get_index();
                 auto kernel_len = 0;
@@ -669,10 +860,12 @@ void FSLParser::_parse_file(fslAST &ast, Span<TokenTree> tokens) {
                     return;
                 }
                 kernel_len++;
-                ast.contents.push_back({_parse_kernel(Slice<TokenTree>::make_slice(tokens, kernel_start, kernel_len))});
+                GlobalDeclaration new_global_decl;
+                new_global_decl.value = _parse_kernel(Slice<TokenTree>::make_slice(tokens, kernel_start, kernel_len));
+                ast.contents.push_back(new_global_decl);
             } break;
             case Token::KEYWORD_LAYOUT: {
-                flush_statement();
+                flush_expression();
                 stream.consume();
                 auto resource_start = stream.get_index();
                 auto resource_len = 0;
@@ -683,28 +876,23 @@ void FSLParser::_parse_file(fslAST &ast, Span<TokenTree> tokens) {
                     print_fsl_err("Unexpected end of file", stream.peek().get_debug_info().row);
                     return;
                 }
-                ast.contents.push_back({_parse_resource(Slice<TokenTree>::make_slice(tokens, resource_start, resource_len))});
+                GlobalDeclaration new_global_decl;
+                new_global_decl.value = _parse_resource(Slice<TokenTree>::make_slice(tokens, resource_start, resource_len));
+                ast.contents.push_back(new_global_decl);
             } break;    
             case Token::SYMBOL_LEFTBRACE:
-                push_statement();
+                push_expression();
             case Token::SYMBOL_SEMICOLON:
-                flush_statement();
+                flush_expression();
                 stream.consume();
                 break;
-            case Token::SPECIFIER_CONST:
-            case Token::SPECIFIER_SHARED:
-            case Token::IDENTIFIER: {
-                if (next_statement_len == 0) {
-
-                }
-            }
             default:
-                push_statement();
+                push_expression();
                 stream.consume();
                 break;
         }
     }
-    flush_statement();
+    flush_expression();
 }
 
 void print_token_tree(LocalVector<TokenTree>& tree, ConsoleString& output) {
@@ -721,24 +909,6 @@ void print_token_tree(LocalVector<TokenTree>& tree, ConsoleString& output) {
             }
         }, subtree.node);
     }
-}
-
-std::optional<fslAST> FSLParser::get_ast(String path) {
-    auto ast = fslAST();
-
-    FSLParser parser;
-    auto parse_out = parser._preprocess(path);
-    if (!parse_out.has_value()) {
-        return {};
-    }
-    ast.tokens = *parse_out;
-    // printvf(tokens_to_string(ast.tokens));
-    LocalVector<TokenTree> tree = parser._collect_scopes(ast.tokens.span());
-    parser._parse_file(ast, tree.span());
-    if (!parser.validate_ast(ast)) {
-        return {};
-    }
-	return std::move(ast);
 }
 
 TokenScope FSLParser::_collect_scope(Span<Token> tokens, uint32_t &token_index) {
@@ -800,6 +970,23 @@ bool FSLParser::validate_ast(const fslAST &ast) {
 	return true;
 }
 
+std::optional<fslAST> FSLParser::get_ast(String path) {
+    auto ast = fslAST();
+
+    FSLParser parser;
+    auto parse_out = parser._preprocess(path);
+    if (!parse_out.has_value()) {
+        return {};
+    }
+    ast.tokens = std::move(*parse_out);
+
+    LocalVector<TokenTree> tree = parser._collect_scopes(ast.tokens.span());
+    parser._parse_file(ast, tree.span());
+    if (!parser.validate_ast(ast)) {
+        return {};
+    }
+	return std::move(ast);
+}
 
 // ************************************
 // *********** PREPROCESSOR ***********

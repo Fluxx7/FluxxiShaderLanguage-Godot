@@ -93,21 +93,13 @@ Pair<BufferInfo, String> buffer_to_glsl(const String &buffer_name, const BufferD
         BufferFieldInfo field_info;
         String type_string = "";
         String postname_string = "";
-        for (const auto &token : field.type.type) {
-            switch (token->category) {
-                case Token::CATEGORY_SPECIFIER:
-                    type_string += token->contents;
-                    break;
-                case Token::CATEGORY_IDENTIFIER: {
-                    type_string += to_original_type(token->contents);
-                } break;
-                default:
-                    break;
-            }
+        for (const auto &token : field.type.specifiers) {
+            type_string += token->contents;
         }
-        for (const auto &array_dim : field.type.array_dims) {
-            postname_string += tokens_to_string(array_dim);
-        }
+        type_string += to_original_type(field.type.type->contents);
+        // for (const auto &array_dim : field.type.array_dims) {
+        //     postname_string += tokens_to_string(array_dim);
+        // }
         field_info.type = typeref_to_fslType(field.type);
         if (const FSLArray* fsl_array = std::get_if<FSLArray>(&field_info.type)) {
             for (const auto& dimension : fsl_array->dimensions) {

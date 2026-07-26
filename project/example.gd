@@ -24,8 +24,8 @@ var N: int = 256
 var tileLength: float = 250.0;
 
 func _ready() -> void:
-	#tess_file.print_AST()
-	fft_file.print_AST()
+	tess_file.print_AST()
+	#fft_file.print_AST()
 	baseSpectrumRect.texture = baseSpectrumTex2DRD
 	#currSpectrumRect.texture = currSpectrumTex2DRD
 	#gaussianRect.texture = gaussianTex2DRD

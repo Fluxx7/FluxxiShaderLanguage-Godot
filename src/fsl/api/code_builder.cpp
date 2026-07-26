@@ -24,46 +24,83 @@ ConsoleString CodeBuilder::gen_statement(const Statement &statement, const HashM
     return statement_code;
 }
 
+ConsoleString CodeBuilder::gen_operation(const Operation &operation, const HashMap<StringName, String> &renames) {
+    ConsoleString operation_code;
+    std::visit(overload{
+        [&](VariableDecl var_decl) {
+        },
+        [&](Operator oper) {
+        },
+        [&](FuncCall func_call) {
+        },
+        [&](VariableRef var_ref) {
+        },
+        [&](FieldAccess field_acces) {
+        },
+        [&](ArrayIndex array_index) {
+        },
+        [&](Literal literal) {
+        },
+        [&](OperationList op_list) {
+            
+        },
+        [&](UnknownOp error_op) {
+
+        }
+    }, operation); 
+    return operation_code;
+}
+
+ConsoleString CodeBuilder::gen_expression(const Expression &expression, const HashMap<StringName, String> &renames) {
+    ConsoleString expr_code;
+	std::visit(overload{
+        [&](Operation op_expression) {
+            expr_code.add(gen_operation(op_expression, renames));
+            expr_code.add_line(";");
+        },
+        [&](IfNode if_node) {
+            expr_code.add("if (");
+            expr_code.add(gen_operation(if_node.cond, renames));
+            expr_code.add(") {");
+            expr_code.indent();
+            expr_code.add(gen_scope(if_node.body, renames));
+            expr_code.unindent();
+            expr_code.add_line("}");
+        },
+        [&](ElseNode else_node) {
+        },
+        [&](ForNode for_node) {
+            expr_code.add("for (");
+            expr_code.add(gen_operation(for_node.init, renames));
+            expr_code.add("; ");
+            expr_code.add(gen_operation(for_node.cond, renames));
+            expr_code.add("; ");
+            expr_code.add(gen_operation(for_node.post, renames));
+            expr_code.add(") {");
+            expr_code.indent();
+            expr_code.add(gen_scope(for_node.body, renames));
+            expr_code.unindent();
+            expr_code.add_line("}");
+        },
+        [&](ScopeNode subblock) {
+            expr_code.add_line("{");
+            expr_code.indent();
+            expr_code.add(gen_scope(subblock, renames));
+            expr_code.unindent();
+            expr_code.add_line("}");
+        },
+        [&](FunctionDecl func_decl) {
+        },
+        [&](ReturnExpression ret_expr) {
+        }
+    }, expression);
+    return expr_code;
+}
+
 ConsoleString CodeBuilder::gen_scope(const ScopeNode &block, const HashMap<StringName, String> &renames) {
     ConsoleString block_code;
     for (const auto &expr : block.body) {
-        std::visit(overload{
-            [&](Statement expression) {
-                block_code.add(gen_statement(expression, renames));
-                block_code.add_line(";");
-            },
-            [&](IfNode if_node) {
-                block_code.add("if (");
-                block_code.add(gen_statement(if_node.cond, renames));
-                block_code.add(") {");
-                block_code.indent();
-                block_code.add(gen_scope(if_node.body, renames));
-                block_code.unindent();
-                block_code.add_line("}");
-            },
-            [&](ElseNode else_node) {
-            },
-            [&](ForNode for_node) {
-                block_code.add("for (");
-                block_code.add(gen_statement(for_node.init, renames));
-                block_code.add("; ");
-                block_code.add(gen_statement(for_node.cond, renames));
-                block_code.add("; ");
-                block_code.add(gen_statement(for_node.post, renames));
-                block_code.add(") {");
-                block_code.indent();
-                block_code.add(gen_scope(for_node.body, renames));
-                block_code.unindent();
-                block_code.add_line("}");
-            },
-            [&](ScopeNode subblock) {
-                block_code.add_line("{");
-                block_code.indent();
-                block_code.add(gen_scope(subblock, renames));
-                block_code.unindent();
-                block_code.add_line("}");
-            }
-        }, expr);
+        block_code.add(gen_expression(expr, renames));
     }
     return block_code;
 }
@@ -71,11 +108,14 @@ ConsoleString CodeBuilder::gen_scope(const ScopeNode &block, const HashMap<Strin
 KernelDef CodeBuilder::gen_kernel(const KernelNode &kernel, const HashMap<StringName, ResourceNode> &resources) {
     ComputeKernel::KernelInfo kernel_info;
     ConsoleString kernel_code;
-    kernel_code.add_line("layout(local_size_x = %d, local_size_y = %d, local_size_z = %d) in;", tokens_to_string(kernel.local_x_threads).to_int(), tokens_to_string(kernel.local_y_threads).to_int(), tokens_to_string(kernel.local_z_threads).to_int());
+    ConsoleString x_threads = gen_operation(kernel.local_x_threads);
+    ConsoleString y_threads = gen_operation(kernel.local_y_threads);
+    ConsoleString z_threads = gen_operation(kernel.local_z_threads);
+    kernel_code.add_line("layout(local_size_x = %s, local_size_y = %s, local_size_z = %s) in;", x_threads.get_output(), y_threads.get_output(), z_threads.get_output());
     kernel_info.kernel_name = kernel.name;
-    kernel_info.local_invocations[0] = tokens_to_string(kernel.local_x_threads).to_int();
-    kernel_info.local_invocations[1] = tokens_to_string(kernel.local_y_threads).to_int();
-    kernel_info.local_invocations[2] = tokens_to_string(kernel.local_z_threads).to_int();
+    kernel_info.local_invocations[0] = x_threads.get_output().to_int();
+    kernel_info.local_invocations[1] = y_threads.get_output().to_int();
+    kernel_info.local_invocations[2] = z_threads.get_output().to_int();
 
     LocalVector<StringName> used_resources;
     if (kernel.push_constants.size() > 0) {
@@ -85,10 +125,10 @@ KernelDef CodeBuilder::gen_kernel(const KernelNode &kernel, const HashMap<String
         for (auto &push_constant : kernel.push_constants) {
             VariableInfo pc_info;
             pc_info.type = typeref_to_fslType(push_constant.type);
-            kernel_code.add("%s %s", tokens_to_string(push_constant.type.type), push_constant.name);
+            kernel_code.add("%s %s %s", tokens_to_string(push_constant.type.specifiers), push_constant.type.type->contents, push_constant.name);
             if (push_constant.type.array_dims.size() > 0) {
                 for (const auto& array_dim : push_constant.type.array_dims) {
-                    kernel_code.add("%s", tokens_to_string(array_dim));
+                    kernel_code.add("%s", gen_operation(array_dim).get_output());
                 }
             }
             kernel_code.add_line(";");
@@ -147,8 +187,8 @@ CodeBuilder::CodeBuilder(const fslAST &ast) {
     HashMap<StringName, ResourceNode> resources;
     for (const GlobalDeclaration &decl : ast.contents) {
         std::visit(overload{
-            [&](const Statement &statement) { 
-                string_builder.add(gen_statement(statement));
+            [&](const Expression &expression) { 
+                string_builder.add(gen_expression(expression));
             },
             [&](const KernelNode &kernel) { 
                 auto kernel_def = gen_kernel(kernel, resources);

@@ -20,10 +20,6 @@ Token::TokenCategory get_category(Token::TokenType tok_type) {
         case Token::SYMBOL_PLUS:
         case Token::SYMBOL_LESSTHAN:
         case Token::SYMBOL_GREATERTHAN:
-        case Token::SYMBOL_LEFTBRACKET:
-        case Token::SYMBOL_RIGHTBRACKET:
-        case Token::SYMBOL_LEFTPAREN:
-        case Token::SYMBOL_RIGHTPAREN:
             return Token::CATEGORY_SYMBOL_OP;
 
         case Token::SYMBOL_COLON:
@@ -34,6 +30,10 @@ Token::TokenCategory get_category(Token::TokenType tok_type) {
         case Token::SYMBOL_SEMICOLON:
         case Token::SYMBOL_LEFTBRACE:
         case Token::SYMBOL_RIGHTBRACE:
+        case Token::SYMBOL_LEFTBRACKET:
+        case Token::SYMBOL_RIGHTBRACKET:
+        case Token::SYMBOL_LEFTPAREN:
+        case Token::SYMBOL_RIGHTPAREN:
         case Token::SYMBOL_BACKSLASH:
         case Token::SYMBOL_POUND:
             return Token::CATEGORY_SYMBOL_OTHER;
@@ -311,11 +311,7 @@ LocalVector<Token> FSLLexer::tokenize(String file_name, String lexee) {
                     token_buffer.push_back(curr_char);
                 } else {
                     if (Token::TokenType symb_type = to_symbol(curr_char); symb_type != Token::ERR_TOKEN) {
-                        dump_token = 1;
-                        next_tok = Token();
-                        next_tok.token_type = symb_type;
-                        next_tok.contents = String() + curr_char;
-                        push_tok = 1;
+                        flush_and_append(symb_type);
                     } else {
                         print_error(vformat("Unexpected character '%c' in file \"%s\"", curr_char, file_name));
                     }
@@ -342,6 +338,7 @@ LocalVector<Token> FSLLexer::tokenize(String file_name, String lexee) {
                 new_tok.token_type = new_tok_type;
                 new_tok.category = get_category(new_tok_type);
                 tokens.push_back(new_tok);
+                next_has_leading_whitespace = false;
             }
             dump_token = 0;
         }
@@ -350,13 +347,16 @@ LocalVector<Token> FSLLexer::tokenize(String file_name, String lexee) {
             next_tok.debug_info.column = column;
             next_tok.debug_info.length = 1;
             next_tok.debug_info.source_file = file_name;
+            next_tok.has_leading_whitespace = next_has_leading_whitespace;
             switch (next_tok.token_type) {
                 case Token::NEWLINE:
                     linenum++;
                     column = 0;
                 case Token::WHITESPACE:
                     next_has_leading_whitespace = true;
+                    break;
                 default:
+                    next_has_leading_whitespace = false;
                     break;
             }
             tokens.push_back(next_tok);

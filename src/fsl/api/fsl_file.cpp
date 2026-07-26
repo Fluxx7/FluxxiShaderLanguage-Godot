@@ -3,8 +3,9 @@
 #include "console_string.h"
 
 void print_shader_info(fslAST &currAst);
-Pair<ResourceInfo, String> gen_resource(ResourceNode &resource, uint32_t set, uint32_t binding, ConsoleString& code_builder);
 
+void print_operation(const Operation& op, ConsoleString& output);
+void print_expression(const Expression& expression, ConsoleString &output);
 void print_resource_node(ResourceNode& resource_node, ConsoleString &output);
 void print_buffer_def(BufferDef& buf_def, ConsoleString &output);
 void print_texture_def(TextureDef& tex_def, ConsoleString &output);
@@ -80,27 +81,70 @@ void FSLFile::test() {
 
 /******** HELPERS *********/
 
+void _print_scope(ScopeNode &block);
+void _print_operation(const Operation& op) {
+    std::visit(overload{
+        [&](VariableDecl var_decl) {
+            printvf("VariableDecl");
+        },
+        [&](Operator oper) {
+            printvf("Operator");
+        },
+        [&](FuncCall func_call) {
+            printvf("FuncCall");
+        },
+        [&](VariableRef var_ref) {
+            printvf("VariableRef");
+        },
+        [&](Literal literal) {
+            printvf("Literal");
+        },
+        [&](FieldAccess field_access) {
+            printvf("FieldAccess");
+        },
+        [&](ArrayIndex array_index) {
+            printvf("ArrayIndex");
+        },
+        [&](OperationList op_list) {
+            printvf("OperationList");
+        },
+        [&](UnknownOp error_op) {
+            printvf("UnknownOp");
+        }
+    }, op);
+}
+
+void _print_expression(const Expression &expression) {
+    std::visit(overload{
+        [&](Operation op_expression) {
+            _print_operation(op_expression);
+        },
+        [&](IfNode if_node) {
+            printvf("If statement");
+        },
+        [&](ElseNode else_node) {
+            printvf("Else statement");
+        },
+        [&](ForNode for_node) {
+            printvf("For statement");
+        },
+        [&](ScopeNode subblock) {
+            printvf("{");
+            _print_scope(subblock);
+            printvf("}");
+        },
+        [&](FunctionDecl func_decl) {
+            printvf("Function declaration");
+        },
+        [&](ReturnExpression ret_expr) {
+            printvf("Return");
+        }
+    }, expression);
+}
+
 void _print_scope(ScopeNode &block) {
     for (const auto &expr : block.body) {
-        std::visit(overload{
-            [&](Statement expression) {
-                printvf("%s;", tokens_to_string(expression));
-            },
-            [&](IfNode if_node) {
-                printvf("If statement");
-            },
-            [&](ElseNode else_node) {
-                printvf("Else statement");
-            },
-            [&](ForNode for_node) {
-                printvf("For statement");
-            },
-            [&](ScopeNode subblock) {
-                printvf("{");
-                _print_scope(subblock);
-                printvf("}");
-            }
-        }, expr);
+        _print_expression(expr);
     }
 }
 
@@ -137,13 +181,13 @@ void FSLFile::load_shader() {
 void print_shader_info(fslAST &currAst) {
     for (GlobalDeclaration &decl : currAst.contents) {
         std::visit(overload{
-            [&](Statement &statement)          { 
+            [&](Expression &expression)          { 
                 print_line("\nShared code:");
-                printvf("%s;", tokens_to_string(statement));
+                _print_expression(expression);
             },
             [&](KernelNode &kernel)      { 
                 print_line("\nKernel " + kernel.name + ":");
-                print_line(vformat("Local threads: %d, %d, %d", tokens_to_string(kernel.local_x_threads).to_int(), tokens_to_string(kernel.local_y_threads).to_int(), tokens_to_string(kernel.local_z_threads).to_int()));
+                // print_line(vformat("Local threads: %d, %d, %d", tokens_to_string(kernel.local_x_threads).to_int(), tokens_to_string(kernel.local_y_threads).to_int(), tokens_to_string(kernel.local_z_threads).to_int()));
                 if (kernel.name_bindings.size() > 0) {
                     print_line("Name bindings:");
                     for (auto [bound_name, orig_name] : kernel.name_bindings) {
@@ -176,8 +220,8 @@ void FSLFile::print_AST() {
     output.indent();
     for (GlobalDeclaration &decl : currAst.contents) {
         std::visit(overload{
-            [&](Statement &statement)          { 
-                output.add_line("Statement: %s", tokens_to_string(statement));
+            [&](Expression &expression)          { 
+                print_expression(expression, output);
             },
             [&](KernelNode &kernel)      { 
                 output.add_line("KernelNode {");
@@ -189,7 +233,13 @@ void FSLFile::print_AST() {
                     return;
                 }
                 output.add_line("Name: %s,", kernel.name);
-                output.add_line("Local threads: [%d, %d, %d],", tokens_to_string(kernel.local_x_threads).to_int(), tokens_to_string(kernel.local_y_threads).to_int(), tokens_to_string(kernel.local_z_threads).to_int());
+                output.add_line("Local threads [");
+                output.indent();
+                print_operation(kernel.local_x_threads, output);
+                print_operation(kernel.local_y_threads, output);
+                print_operation(kernel.local_z_threads, output);
+                output.unindent();
+                output.add_line("],");
                 if (kernel.name_bindings.size() > 0) {
                     output.add_line("Name bindings {");
                     output.indent();
@@ -239,16 +289,15 @@ void print_type(TypeRef &type_ref, ConsoleString &output) {
         output.add_line("},");
         return;
     }
-    output.add_line("Type: %s,", tokens_to_string(type_ref.type));
+    if (!type_ref.specifiers.is_empty()) {
+        output.add_line("Specifiers: %s,", tokens_to_string(type_ref.specifiers));
+    }
+    output.add_line("Type: %s,", type_ref.type->contents);
     if (type_ref.array_dims.size() > 0) {
         output.add_line("Array dimensions {");
         output.indent();
         for (const auto& array_dim : type_ref.array_dims) {
-            if (array_dim.is_empty()) {
-                output.add_line("unsized,");
-            } else {
-                output.add_line("%s,", tokens_to_string(array_dim));
-            }
+            print_operation(array_dim, output);
         }
         output.unindent();
         output.add_line("},");
@@ -257,8 +306,202 @@ void print_type(TypeRef &type_ref, ConsoleString &output) {
     output.add_line("},");
 }
 
+void print_operation(const Operation &op, ConsoleString &output) {
+    std::visit(overload{
+        [&](VariableDecl var_decl) {
+            print_variable_decl(var_decl, output);
+        },
+        [&](Operator oper) {
+            output.add_line("Operator: %s,", oper.symbol);
+        },
+        [&](FuncCall func_call) {
+            output.add_line("FuncCall {");
+            output.indent();
+            if (!func_call.is_valid) {
+                output.add_line("Error");
+                output.unindent();
+                output.add_line("},");
+                return;
+            }
+            output.add_line("Name: %s,", func_call.name);
+            if (func_call.args.size() > 0) {
+                output.add_line("Args {");
+                output.indent();
+                for (const auto& arg : func_call.args) {
+                    print_operation(arg, output);
+                }
+                output.unindent();
+                output.add_line("},");
+            }
+            output.unindent();
+            output.add_line("},");
+        },
+        [&](VariableRef var_ref) {
+            if (!var_ref.is_valid) {
+                output.add_line("VariableRef: Error,");
+                return;
+            }
+            output.add_line("VariableRef: %s,", var_ref.name);
+        },
+        [&](OperationList op_list) {
+            output.add_line("OperationList {");
+            output.indent();
+            if (!op_list.is_valid) {
+                output.add_line("Error");
+                output.unindent();
+                output.add_line("},");
+                return;
+            }
+            for (const auto& operation : op_list.operations) {
+                print_operation(operation, output);
+            }
+            output.unindent();
+            output.add_line("},");
+        }, 
+        [&](FieldAccess field_access) {
+            if (!field_access.is_valid) {
+                output.add_line("FieldAccess: Error,");
+                return;
+            }
+            output.add_line("FieldAccess: %s,", field_access.field_name);
+        }, 
+        [&](ArrayIndex array_index) {
+            output.add_line("ArrayIndex {");
+            output.indent();
+            if (!array_index.is_valid) {
+                output.add_line("Error");
+                output.unindent();
+                output.add_line("},");
+                return;
+            }
+            output.add_line("Indices {");
+            output.indent();
+            for (const auto& index : array_index.indices) {
+                print_operation(index, output);
+            }
+            output.unindent();
+            output.add_line("},");
+            output.unindent();
+            output.add_line("},");
+        }, 
+        [&](Literal literal) {
+            if (!literal.is_valid) {
+                output.add_line("Literal: Error,");
+                return;
+            }
+            output.add_line("Literal: %s,", literal.value);
+        },
+        [&](UnknownOp error_op) {
+            output.add_line("Error {");
+            output.indent();
+            output.add_line("Code: %s", tokens_to_string(error_op.code));
+            output.unindent();
+            output.add_line("},");
+        }
+    }, op);
+}
+
+void print_expression(const Expression &expression, ConsoleString &output) {
+	std::visit(overload{
+        [&](Operation op_expression) {
+            print_operation(op_expression, output);
+        },
+        [&](IfNode if_node) {
+            output.add_line("IfNode {");
+            output.indent();
+            if (!if_node.is_valid) {
+                output.add_line("Error");
+                output.unindent();
+                output.add_line("},");
+                return;
+            }
+            output.add_line("Condition {");
+            output.indent();
+            print_operation(if_node.cond, output);
+            output.unindent();
+            output.add_line("},");
+            output.add_line("Body {");
+            output.indent();
+            print_scope_node(if_node.body, output);
+            output.unindent();
+            output.add_line("},");
+            output.unindent();
+            output.add_line("},");
+            
+        },
+        [&](ElseNode else_node) {
+            output.add_line("ElseNode {");
+            output.indent();
+            if (!else_node.is_valid) {
+                output.add_line("Error");
+                output.unindent();
+                output.add_line("},");
+                return;
+            }
+            output.add_line("Body {");
+            output.indent();
+            print_scope_node(else_node.body, output);
+            output.unindent();
+            output.add_line("},");
+            output.unindent();
+            output.add_line("},");
+        },
+        [&](ForNode for_node) {
+            output.add_line("ForNode {");
+            output.indent();
+            if (!for_node.is_valid) {
+                output.add_line("Error");
+                output.unindent();
+                output.add_line("},");
+                return;
+            }
+            output.add_line("Initial statement {");
+            output.indent();
+            print_operation(for_node.init, output);
+            output.unindent();
+            output.add_line("},");
+            output.add_line("Condition {");
+            output.indent();
+            print_operation(for_node.cond, output);
+            output.unindent();
+            output.add_line("},");
+            output.add_line("Post-check statement {");
+            output.indent();
+            print_operation(for_node.post, output);
+            output.unindent();
+            output.add_line("},");
+            output.add_line("Body {");
+            output.indent();
+            print_scope_node(for_node.body, output);
+            output.unindent();
+            output.add_line("},");
+            output.unindent();
+            output.add_line("},");
+        },
+        [&](ScopeNode subblock) {
+            print_scope_node(subblock, output);
+        },
+        [&](FunctionDecl func_decl) {
+            print_func_decl(func_decl, output);
+        },
+        [&](ReturnExpression ret_expr) {
+            output.add_line("ReturnExpression {");
+            output.indent();
+            if (!ret_expr.is_valid) {
+                output.add_line("Error");
+                output.unindent();
+                output.add_line("},");
+                return;
+            }
+            print_operation(ret_expr.return_val, output);
+            output.unindent();
+            output.add_line("},");
+        }
+    }, expression);
+}
+
 void print_resource_node(ResourceNode &resource_node, ConsoleString &output) {
-    output.add_line("ResourceNode {");
+	output.add_line("ResourceNode {");
     output.indent();
     if (!resource_node.is_valid) {
         output.add_line("Error");
@@ -351,70 +594,7 @@ void print_scope_node(ScopeNode& block_node, ConsoleString &output) {
         return;
     }
     for (const auto &expr : block_node.body) {
-        std::visit(overload{
-            [&](Statement expression) {
-                output.add_line("Statement: %s", tokens_to_string(expression));
-            },
-            [&](IfNode if_node) {
-                output.add_line("IfNode {");
-                output.indent();
-                if (!if_node.is_valid) {
-                    output.add_line("Error");
-                    output.unindent();
-                    output.add_line("},");
-                    return;
-                }
-                output.add_line("Condition: %s,", tokens_to_string(if_node.cond));
-                output.add_line("Body {");
-                output.indent();
-                print_scope_node(if_node.body, output);
-                output.unindent();
-                output.add_line("},");
-                output.unindent();
-                output.add_line("},");
-                
-            },
-            [&](ElseNode else_node) {
-                output.add_line("ElseNode {");
-                output.indent();
-                if (!else_node.is_valid) {
-                    output.add_line("Error");
-                    output.unindent();
-                    output.add_line("},");
-                    return;
-                }
-                output.add_line("Body {");
-                output.indent();
-                print_scope_node(else_node.body, output);
-                output.unindent();
-                output.add_line("},");
-                output.unindent();
-                output.add_line("},");
-            },
-            [&](ForNode for_node) {
-                output.add_line("ForNode {");
-                output.indent();
-                if (!for_node.is_valid) {
-                    output.add_line("Error");
-                    output.unindent();
-                    output.add_line("},");
-                    return;
-                }
-                output.add_line("Initial statement: %s,", tokens_to_string(for_node.init));
-                output.add_line("Condition: %s,", tokens_to_string(for_node.cond));
-                output.add_line("Post-check statement: %s,", tokens_to_string(for_node.post));
-                output.add_line("Body {");
-                output.indent();
-                print_scope_node(for_node.body, output);
-                output.unindent();
-                output.add_line("},");
-                output.unindent();
-                output.add_line("},");
-            },
-            [&](ScopeNode subblock) {
-                print_scope_node(subblock, output);
-            }
-        }, expr);
+        print_expression(expr, output);
     }
     output.unindent();
     output.add_line("},");

@@ -11,6 +11,8 @@ private:
     ConsoleString string_builder;
     CodeBuilder(const fslAST& ast);
     ConsoleString gen_statement(const Statement &statement, const HashMap<StringName, String> &renames = {});
+    ConsoleString gen_operation(const Operation &operation, const HashMap<StringName, String> &renames = {});
+    ConsoleString gen_expression(const Expression &expression, const HashMap<StringName, String> &renames = {});
     ConsoleString gen_scope(const ScopeNode &block, const HashMap<StringName, String> &renames = {});
     KernelDef gen_kernel(const KernelNode &kernel, const HashMap<StringName, ResourceNode> &resources);
     Pair<ResourceInfo, String> gen_resource(const ResourceNode &resource, uint32_t set, uint32_t binding);

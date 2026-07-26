@@ -60,7 +60,9 @@ protected:
     TypeRef _parse_type(TokenStream& stream);
     VariableDecl _parse_var_decl(TokenStream&& stream);
 
-    Statement _parse_statement(TokenStream&& stream, bool is_global = false);
+    Operation _parse_op_segment(TokenStream& stream);
+    OperationList _parse_operation(TokenStream&& stream);
+    Expression _parse_expression(TokenStream&& stream, bool is_global = false);
 
     IfNode _parse_if_statement(TokenStream&& stream);
     ElseNode _parse_else_statement(TokenStream&& stream);
@@ -70,8 +72,12 @@ protected:
         return _parse_var_decl(tokens.get_stream());
     }
 
-    Statement _parse_statement(Slice<TokenTree> tokens, bool is_global = false) {
-        return _parse_statement(tokens.get_stream(), is_global);
+    OperationList _parse_operation(Slice<TokenTree> tokens) {
+        return _parse_operation(tokens.get_stream());
+    }
+
+    Expression _parse_expression(Slice<TokenTree> tokens, bool is_global = false) {
+        return _parse_expression(tokens.get_stream(), is_global);
     }
 
     IfNode _parse_if_statement(Slice<TokenTree> tokens) {

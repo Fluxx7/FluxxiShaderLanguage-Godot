@@ -25,120 +25,131 @@ struct DebugInfo {
     uint32_t end_column;
 };
 
+struct FSLNode {
+    DebugInfo debug_info;
+    bool is_valid = true;
+};
+
 struct ScopeNode;
 struct IfNode;
 struct ElseNode;
 struct ForNode;
+struct FunctionDecl;
 
 typedef LocalVector<TokenTree> Statement;
 
-struct TypeRef {
-    LocalVector<const Token*> type;
-    LocalVector<Statement> array_dims;
-    DebugInfo debug_info;
-    bool is_valid = true;
+struct OperationList;
+
+struct TypeRef : FSLNode {
+    LocalVector<const Token*> specifiers;
+    const Token* type;
+    LocalVector<OperationList> array_dims;
 };
 
-struct FuncCall {
-    StringName func_name;
-    LocalVector<Statement> args;
-    bool is_valid = true;
-};
-
-struct PlaceValueOperation {
-    Statement lhs;
-    Statement op_tokens;
-    Statement rhs;
-    bool is_valid = true;
-};
-
-
-typedef std::variant<Statement, IfNode, ElseNode, ForNode, ScopeNode> Expression;
-
-struct ScopeNode {
-    LocalVector<Expression> body;
-    DebugInfo debug_info;
-    bool is_valid = true;
-};
-
-struct IfNode {
-    Statement cond;
-    ScopeNode body;
-    DebugInfo debug_info;
-    bool is_valid = true;
-};
-
-struct ElseNode {
-    ScopeNode body;
-    DebugInfo debug_info;
-    bool is_valid = true;
-};
-
-struct ForNode {
-    Statement init;
-    Statement cond;
-    Statement post;
-    ScopeNode body;
-    DebugInfo debug_info;
-    bool is_valid = true;
-};
-
-struct VariableDecl {
+struct VariableDecl : FSLNode {
     StringName name;
     TypeRef type;
-    DebugInfo debug_info;
-    bool is_valid = true;
 };
 
-struct FunctionDecl {
+struct FuncCall : FSLNode {
+    StringName name;
+    LocalVector<OperationList> args;
+};
+
+struct Operator : FSLNode {
+    String symbol;
+};
+
+struct VariableRef : FSLNode {
+    StringName name;
+};
+
+struct Literal : FSLNode {
+    String value;
+};
+
+struct FieldAccess : FSLNode {
+    StringName field_name;
+};
+
+struct ArrayIndex : FSLNode {
+    LocalVector<OperationList> indices;
+};
+
+struct UnknownOp : FSLNode {
+    Statement code;
+};
+
+typedef std::variant<VariableDecl, Operator, Literal, FieldAccess, ArrayIndex, FuncCall, VariableRef, UnknownOp, OperationList> Operation;
+
+struct OperationList : FSLNode {
+    LocalVector<Operation> operations;
+};
+
+struct ReturnExpression : FSLNode{
+    OperationList return_val;
+};
+
+typedef std::variant<OperationList, IfNode, ElseNode, ForNode, ScopeNode, FunctionDecl, ReturnExpression> Expression;
+
+struct ScopeNode : FSLNode {
+    LocalVector<Expression> body;
+};
+
+struct IfNode : FSLNode {
+    OperationList cond;
+    ScopeNode body;
+};
+
+struct ElseNode : FSLNode {
+    ScopeNode body;
+};
+
+struct ForNode : FSLNode {
+    OperationList init;
+    OperationList cond;
+    OperationList post;
+    ScopeNode body;
+};
+
+struct FunctionDecl : FSLNode {
     StringName name;
     TypeRef return_type;
     LocalVector<VariableDecl> args;
     ScopeNode code;
-    DebugInfo debug_info;
-    bool is_valid = true;
 };
 
-struct TextureDef {
+struct TextureDef : FSLNode {
     TextureFormat format;
     TextureType type;
-    DebugInfo debug_info;
-    bool is_valid = true;
 };
 
-struct BufferDef {
+struct BufferDef : FSLNode {
     StringName buffer_name;
     BufferType buftype;
     BufferFormat layout;
     LocalVector<VariableDecl> fields;
-    DebugInfo debug_info;
-    bool is_valid = true;
 };
 
-struct ResourceNode {
+struct ResourceNode : FSLNode {
     StringName name;
     std::variant<VariableDecl, BufferDef, TextureDef> resource;
-    DebugInfo debug_info;
-    bool is_valid = true;
 };
 
-struct KernelNode {
+struct KernelNode : FSLNode {
     StringName name;
     LocalVector<VariableDecl> push_constants;
     HashMap<StringName, String> name_bindings; 
 
-    Statement local_x_threads;
-    Statement local_y_threads;
-    Statement local_z_threads;
+    OperationList local_x_threads;
+    OperationList local_y_threads;
+    OperationList local_z_threads;
     ScopeNode code;
-    DebugInfo debug_info;
-    bool is_valid = true;
 };
 
 
-struct GlobalDeclaration {
-    std::variant<KernelNode, ResourceNode, Statement, FunctionDecl> value;
-    DebugInfo debug_info;
+struct GlobalDeclaration : FSLNode {
+    std::variant<KernelNode, ResourceNode, Expression, FunctionDecl> value;
 };
 
 
@@ -241,17 +252,17 @@ inline FSLType typeref_to_fslType(const TypeRef &type_ref) {
     FSLPrimitive primitive_type = FLOAT;
     FSLVecSize vec_size = ONE;
     LocalVector<uint32_t> array_dims;
-    const auto& tokens = type_ref.type;
+    const auto& type_token = type_ref.type;
     uint32_t type_index = 0;
     for (auto val : fsl_primitives) {
-        if (tokens[0]->contents == val) {
+        if (type_token->contents == val) {
             primitive_type = (FSLPrimitive) type_index;
         } else {
             type_index++;
         }
     }
-    uint32_t final_char_index = tokens[0]->contents.length() - 1;
-    String final_char = tokens[0]->contents.substr(final_char_index);
+    uint32_t final_char_index = type_token->contents.length() - 1;
+    String final_char = type_token->contents.substr(final_char_index);
     if (final_char.is_valid_int()) {
         uint32_t token_val = final_char.to_int();
         if (token_val > 4 || token_val == 0) {
@@ -259,18 +270,18 @@ inline FSLType typeref_to_fslType(const TypeRef &type_ref) {
         }
         vec_size = (FSLVecSize) token_val;
     }
-    for(const auto& array_dim : type_ref.array_dims) {
-        uint32_t index = 0;
-        if (array_dim[index].get_type() == Token::SYMBOL_LEFTBRACKET) {
-            index++;
-            if (array_dim[index].get_type() == Token::INTEGER) {
-                array_dims.push_back(array_dim[index].get_contents().to_int());
-                index++;
-            } else {
-                array_dims.push_back(0);
-            }
-        }
-    }
+    // for(const auto& array_dim : type_ref.array_dims) {
+    //     uint32_t index = 0;
+    //     if (array_dim[index].get_type() == Token::SYMBOL_LEFTBRACKET) {
+    //         index++;
+    //         if (array_dim[index].get_type() == Token::INTEGER) {
+    //             array_dims.push_back(array_dim[index].get_contents().to_int());
+    //             index++;
+    //         } else {
+    //             array_dims.push_back(0);
+    //         }
+    //     }
+    // }
     if (array_dims.size() > 0) {
         return (FSLArray) {(FSLCoreType){primitive_type, vec_size}, array_dims};
     }
@@ -278,11 +289,12 @@ inline FSLType typeref_to_fslType(const TypeRef &type_ref) {
 }
 
 inline String typeref_to_string(const TypeRef &type_ref) {
-    String output = tokens_to_string(type_ref.type);
+    String output = tokens_to_string(type_ref.specifiers);
+    output += type_ref.type->contents;
     if (type_ref.array_dims.size() > 0) {
-        for (const auto& array_dim : type_ref.array_dims) {
-            output += vformat("%s", tokens_to_string(array_dim));
-        }
+        // for (const auto& array_dim : type_ref.array_dims) {
+        //     output += vformat("%s", tokens_to_string(array_dim));
+        // }
     }
     return output;
 }

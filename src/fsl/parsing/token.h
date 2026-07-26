@@ -176,6 +176,14 @@ public:
             return scope.open;
         }
     }
+    bool has_leading_whitespace() const {
+        if (const Token* const* tok = std::get_if<const Token*>(&node)) {
+            return (*tok)->has_leading_whitespace;
+        } else {
+            const TokenScope& scope = std::get<TokenScope>(node);
+            return scope.open->has_leading_whitespace;
+        }
+    }
     void flatten(LocalVector<const Token*>& tokens) const;
     const LocalVector<const Token*> flatten() const;
 };
@@ -196,6 +204,7 @@ public:
 
     bool ok() const { return Stream<TokenTree>::ok(); }
     bool at_end() const { return Stream<TokenTree>::at_end(); }
+    void reset() { index = start; errored = false; }
 
     const TokenTree& peek() const;
     const TokenTree& consume();
@@ -218,6 +227,9 @@ public:
     uint32_t get_index() { return index; };
 
     Slice<TokenTree> get_slice(uint32_t _start, uint32_t len);
+    TokenStream trim() const {
+        return TokenStream(source, index, end);
+    }
 
     template<Token::TokenType end_tok>
     bool consume_until(std::function<void(const Token*)> func) {
