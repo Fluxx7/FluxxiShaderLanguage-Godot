@@ -1,0 +1,53 @@
+//! EXPECT: valid
+//! KERNELS: exprTorture
+//
+// Expression stress test: operator precedence, unary chains, ternaries,
+// swizzle chains and write masks, literal formats, nested calls/indexing,
+// every compound assignment operator.
+
+layout(std430) buffer exprResults {
+    float[] results;
+};
+
+const float BIG = 1.0e12;
+const float TINY = 1e-6;
+
+kernel[64, 1, 1] exprTorture(id : GlobalInvocationID, uint count, float scale) {
+    if (id.x >= count) return;
+    uint i = id.x;
+
+    // precedence mix: shifts, bitwise, arithmetic, comparison, logical
+    uint bits = ((i << 3) | (i >> 1)) & ~(i * 3u) ^ 0xF0u;
+    bool weird = (i % 5u != 0u) && !(i == 3u) || (bits > 128u);
+
+    // nested ternaries
+    float t = weird ? (i > 32u ? 1.0 : 0.25) : (bits == 0u ? -1.0 : TINY);
+
+    // unary chains
+    float n = -(-(-t));
+    bool  b = !!weird;
+
+    // literal formats: trailing dot, leading dot, exponents, suffixes, hex
+    float lits = 1. + .5 + 1.5e+3 + 2E-2 + 0.5f + float(0x1Fu) + float(3u);
+
+    // swizzle chains and write masks
+    float4 v = float4(t, n, scale, 1.0);
+    float2 sw = v.wzyx.yx;
+    v.xy += sw.yx * 2.0;
+    v.zw = v.xx;
+    float single = v.xyzw.wzyx.x;
+
+    // deeply nested parens
+    float deep = ((((((((t + 1.0)))))))) * (((n)));
+
+    // every compound assignment
+    float acc = 0.0;
+    acc += t; acc -= n; acc *= 2.0; acc /= 4.0;
+    uint u = i;
+    u %= 7u; u <<= 2; u >>= 1; u &= 0xFFu; u |= 1u; u ^= 0x10u;
+    u++; ++u; u--; --u;
+
+    // nested calls feeding nested indexing
+    results[(i + uint(floor(abs(sin(float(i) * TINY)) * 8.0))) % count] = acc;
+    results[i] = acc * t + float(u) + single + deep + lits + v.x + (b ? BIG : 0.0);
+}

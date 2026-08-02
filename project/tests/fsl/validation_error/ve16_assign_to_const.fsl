@@ -1,0 +1,12 @@
+//! EXPECT: validation_error
+// Assignment to a const variable.
+
+layout(std430) buffer sinkBuf {
+    float[] sink;
+};
+
+kernel[1, 1, 1] assignToConst() {
+    const float c = 1.0;
+    c = 2.0;
+    sink[0] = c;
+}

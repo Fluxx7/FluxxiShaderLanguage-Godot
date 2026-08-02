@@ -1,0 +1,24 @@
+//! EXPECT: valid
+//! KERNELS: specKernel
+//
+// Annotation stress test (design: trailing-colon annotations,
+// <type> <name> : annotation(args)? = value;). Specialization constants
+// with and without an explicit id, a spec-constant-sized shared array
+// (pipeline-const dims are legal for shared arrays), and a spec-constant
+// kernel local size (SPIR-V allows spec-constant workgroup sizes).
+
+const uint fft_size : specialization_constant = 256;
+const uint cascade_count : specialization_constant(3) = 4;
+
+layout(std430) buffer annBuf {
+    float[] ann_out;
+};
+
+shared float2[fft_size / 2u] spec_sized_cache;
+
+kernel[fft_size, 1, 1] specKernel(g : GlobalInvocationID, l : LocalInvocationID) {
+    uint slot = l.x % (fft_size / 2u);
+    spec_sized_cache[slot] = float2(float(g.x), 9.81);
+    barrier();
+    ann_out[g.x] = spec_sized_cache[slot].y * float(cascade_count);
+}

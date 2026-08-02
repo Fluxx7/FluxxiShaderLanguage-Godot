@@ -1,0 +1,6 @@
+//! EXPECT: parse_error
+// Include target does not exist.
+
+#include "this_file_does_not_exist.fsl"
+
+const float x = 1.0;

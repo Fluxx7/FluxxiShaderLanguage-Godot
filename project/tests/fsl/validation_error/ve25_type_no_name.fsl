@@ -1,0 +1,8 @@
+//! EXPECT: validation_error
+// Type name with no variable name. By design this parses as a variable
+// reference to "float"; the validator must reject an identifier that
+// refers to a type being used as a value.
+
+kernel[1, 1, 1] typeNoName() {
+    float = 3.0;
+}

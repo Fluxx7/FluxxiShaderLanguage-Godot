@@ -5,6 +5,7 @@ void ComputePlan::_bind_methods() {
     ClassDB::bind_static_method("ComputePlan", D_METHOD("make_new", "rendering_device"), &ComputePlan::make_new);
     ClassDB::bind_method(D_METHOD("add_barrier", "is_temp"), &ComputePlan::add_barrier, DEFVAL(false));
     ClassDB::bind_method(D_METHOD("add_kernel", "kernel", "x_invocations", "y_invocations", "z_invocations", "push_constants", "is_temp"), &ComputePlan::add_kernel, DEFVAL((TypedDictionary<StringName, Variant>())), DEFVAL(false));
+    ClassDB::bind_method(D_METHOD("add_kernel_workgroups", "kernel", "x_workgroups", "y_workgroups", "z_workgroups", "push_constants", "is_temp"), &ComputePlan::add_kernel_workgroups, DEFVAL((TypedDictionary<StringName, Variant>())), DEFVAL(false));
     ClassDB::bind_method(D_METHOD("add_plan", "subplan", "is_temp"), &ComputePlan::add_plan, DEFVAL(false));
     ClassDB::bind_method(D_METHOD("dispatch"), &ComputePlan::dispatch);
 }
@@ -98,6 +99,22 @@ Ref<ComputePlan> ComputePlan::add_kernel(Ref<ComputeKernel> kernel, uint32_t x_i
     ShaderDispatch new_dispatch = {
         kernel,
         {std::get<0>(workgroups), std::get<1>(workgroups), std::get<2>(workgroups)},
+        push_constants
+    };
+    if (is_temp) {
+        temp_items.push_back({ComputePlanItem::Shader, temp_dispatches.size()});
+        temp_dispatches.push_back(new_dispatch);
+    } else {
+        compute_items.push_back({ComputePlanItem::Shader, dispatches.size()});
+        dispatches.push_back(new_dispatch);
+    }
+	return this;
+}
+
+Ref<ComputePlan> ComputePlan::add_kernel_workgroups(Ref<ComputeKernel> kernel, uint32_t x_workgroups, uint32_t y_workgroups, uint32_t z_workgroups, TypedDictionary<StringName, Variant> push_constants, bool is_temp) {
+    ShaderDispatch new_dispatch = {
+        kernel,
+        {x_workgroups, y_workgroups, z_workgroups},
         push_constants
     };
     if (is_temp) {

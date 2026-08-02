@@ -1,0 +1,14 @@
+//! EXPECT: validation_error
+// Non-void function with a control path that falls off the end.
+
+layout(std430) buffer sinkBuf {
+    float[] sink;
+};
+
+float sometimesReturns(float x) {
+    if (x > 0.0) return 1.0;
+}
+
+kernel[1, 1, 1] missingReturn() {
+    sink[0] = sometimesReturns(-1.0);
+}

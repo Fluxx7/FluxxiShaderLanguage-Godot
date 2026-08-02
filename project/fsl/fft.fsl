@@ -1,4 +1,4 @@
-#include "../shared_resources.fsl"
+#include "shared_resources.fsl"
 //#define USE_NORMALIZATION
 
 layout(std430) buffer twiddleFactors {
@@ -15,8 +15,8 @@ layout(std430) buffer fft_buffers {
 #define fft_index(x, y) fft_data[(cascade_index * N + y ) * N + x ] 
 #define fft_vindex(v) fft_index(v.x, v.y)
 
-#define FFT_SIZE 256
-#define FFT_SIZE_HALF 128
+const uint FFT_SIZE_HALF = 128;
+const uint FFT_SIZE = FFT_SIZE_HALF * 2;
 
 
 kernel[32, 1, 1] twiddleGen(id : GlobalInvocationID, uint N) {
@@ -29,8 +29,8 @@ kernel[32, 1, 1] twiddleGen(id : GlobalInvocationID, uint N) {
 shared float2[FFT_SIZE_HALF] local_twiddles;
 shared float2[2][FFT_SIZE] local_data;
 
-#define dest(index) local_data[curr_dest][index]
-#define source(index) local_data[curr_source][index]
+#define dest(ind) local_data[curr_dest][ind]
+#define source(ind) local_data[curr_source][ind]
 
 void ifft_stage(uint N, uint stage, uint curr_source, uint curr_dest, const uint3 coords) {
 	uint x_coord = coords.x;

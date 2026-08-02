@@ -1,0 +1,6 @@
+//! EXPECT: parse_error
+// layout() with an empty format list.
+
+layout() buffer noFormat {
+    float[] xs;
+};

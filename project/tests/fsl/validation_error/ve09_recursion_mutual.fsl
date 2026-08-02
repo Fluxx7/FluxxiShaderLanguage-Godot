@@ -1,0 +1,22 @@
+//! EXPECT: validation_error
+// Mutual recursion through two functions — needs the call graph to detect.
+// (ping also calls pong before pong is declared; if forward references are
+// rejected instead, that is still a correct validation error for this file.)
+
+layout(std430) buffer sinkBuf {
+    float[] sink;
+};
+
+float ping(float n) {
+    if (n <= 0.0) return 0.0;
+    return pong(n - 1.0);
+}
+
+float pong(float n) {
+    if (n <= 0.0) return 1.0;
+    return ping(n - 1.0);
+}
+
+kernel[1, 1, 1] mutualRecursion() {
+    sink[0] = ping(6.0);
+}

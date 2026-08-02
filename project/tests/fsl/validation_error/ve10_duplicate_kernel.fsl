@@ -1,0 +1,14 @@
+//! EXPECT: validation_error
+// Two kernels with the same name.
+
+layout(std430) buffer sinkBuf {
+    float[] sink;
+};
+
+kernel[8, 1, 1] sameName(g : GlobalInvocationID) {
+    sink[g.x] = 1.0;
+}
+
+kernel[16, 1, 1] sameName(g : GlobalInvocationID) {
+    sink[g.x] = 2.0;
+}

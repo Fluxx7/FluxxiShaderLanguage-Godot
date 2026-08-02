@@ -12,7 +12,7 @@ var gaussianTex2DRD := Texture2DRD.new()
 var spectrum_file = FSLFile.from_file("fsl/spectrums.fsl")
 var spreading_file = FSLFile.from_file("fsl/spreadings.fsl")
 var tess_file = FSLFile.from_file("fsl/tessendorf_funcs.fsl")
-var fft_file = FSLFile.from_file("fsl/fft_testing/fft.fsl")
+var fft_file = FSLFile.from_file("fsl/fft.fsl")
 
 @onready var spectrums := spectrum_file.get_kernel_group()
 
@@ -24,8 +24,11 @@ var N: int = 256
 var tileLength: float = 250.0;
 
 func _ready() -> void:
-	tess_file.print_AST()
+	#tess_file.print_AST()
 	#fft_file.print_AST()
+	fft_file.get_kernel("ifftRow").print_info()
+	#spectrum_file.get_kernel("tmaSpectrum").print_info()
+	#tess_file.print_AST()
 	baseSpectrumRect.texture = baseSpectrumTex2DRD
 	#currSpectrumRect.texture = currSpectrumTex2DRD
 	#gaussianRect.texture = gaussianTex2DRD

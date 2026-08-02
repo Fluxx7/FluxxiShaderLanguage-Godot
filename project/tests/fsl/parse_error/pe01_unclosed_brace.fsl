@@ -1,0 +1,9 @@
+//! EXPECT: parse_error
+// Kernel body brace is never closed; file ends mid-scope.
+
+layout(std430) buffer peBuf {
+    float[] xs;
+};
+
+kernel[8, 1, 1] broken(g : GlobalInvocationID) {
+    xs[g.x] = 1.0;

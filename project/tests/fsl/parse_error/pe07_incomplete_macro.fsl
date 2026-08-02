@@ -1,0 +1,5 @@
+//! EXPECT: parse_error
+// Function-macro argument list cut off by the end of the line.
+
+#define BROKEN(a,
+const float x = 1.0;

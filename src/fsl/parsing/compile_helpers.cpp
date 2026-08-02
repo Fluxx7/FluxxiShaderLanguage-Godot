@@ -71,6 +71,24 @@ String to_original_name(const String &name) {
     return name;
 }
 
+String gen_binding_code(const String &name, const String &bound_name) {
+    static const godot::AHashMap<StringName, Pair<StringName, String>> binding_map = {
+        {"GlobalInvocationID", {"uvec3", "gl_GlobalInvocationID"}},
+        {"LocalInvocationID", {"uvec3", "gl_LocalInvocationID"}},
+        {"LocalInvocationIndex", {"uint", "gl_LocalInvocationIndex"}},
+        {"WorkGroupID", {"uvec3", "gl_WorkGroupID"}},
+        {"WorkGroupSize", {"uvec3", "gl_WorkGroupSize"}},
+        {"NumWorkGroups", {"uvec3", "gl_NumWorkGroups"}}
+    };
+    static const char *original_names[] = {
+        "gl_WorkGroupID", 
+        "gl_WorkGroupSize", 
+        "gl_NumWorkGroups"
+    }; 
+    const auto& binding = binding_map[bound_name];
+    return vformat("const %s %s = %s;", binding.first, name, binding.second);
+}
+
 String tex_to_glsl_name(const TextureType &tex_type) {
     switch (tex_type) {
         case TEXTURE2D:
@@ -80,54 +98,12 @@ String tex_to_glsl_name(const TextureType &tex_type) {
     }
 }
 
-Pair<BufferInfo, String> buffer_to_glsl(const String &buffer_name, const BufferDef &buffer) {
-	BufferInfo buf_info;
-    String res_code = "";
-    buf_info.type = buffer.buftype;
-    buf_info.format = buffer.layout;
-    String buffer_type = buffer.buftype == UNIFORM ? "uniform" : "buffer";
-    String buffer_layout = buffer.layout == STD140 ? "std140" : "std430";
-    res_code += vformat("%s) %s restrict %s {\n", buffer_layout, buffer_type, buffer_name);
-    uint32_t curr_offset = 0;
-    for (auto field : buffer.fields) {
-        BufferFieldInfo field_info;
-        String type_string = "";
-        String postname_string = "";
-        for (const auto &token : field.type.specifiers) {
-            type_string += token->contents;
-        }
-        type_string += to_original_type(field.type.type->contents);
-        // for (const auto &array_dim : field.type.array_dims) {
-        //     postname_string += tokens_to_string(array_dim);
-        // }
-        field_info.type = typeref_to_fslType(field.type);
-        if (const FSLArray* fsl_array = std::get_if<FSLArray>(&field_info.type)) {
-            for (const auto& dimension : fsl_array->dimensions) {
-                if (dimension == 0) {
-                    buf_info.has_unsized_field = true;
-                }
-                field_info.dimensions.push_back(dimension);
-            }
-        }
-        field_info.offset = curr_offset;
-        curr_offset += get_fsl_type_alignment(field_info.type, 1, buffer.layout);
-
-        buf_info.fields[field.name] = field_info;
-        res_code += vformat("\t%s %s%s;\n", type_string, field.name, postname_string);
-    }
-    if (!(buffer.buffer_name.length() == 0)) {
-        res_code += vformat("} %s;\n",  buffer.buffer_name);
-    } else {
-        res_code += "};\n";
-    }
-	return {buf_info, res_code};
-}
-
-Pair<TextureInfo, String> texture_to_glsl(const String &texture_name, const TextureDef &texture) {
+Pair<TextureInfo, String> texture_to_glsl(const String &texture_name, const AST::TextureDef &texture) {
     TextureInfo tex_info;
     String res_code;
     tex_info.format = texture.format;
     tex_info.type = texture.type;
+    tex_info.mip_count = 1;
 
     String tex_format = textureFormat_to_string(texture.format);
     String tex_type = tex_to_glsl_name(texture.type);

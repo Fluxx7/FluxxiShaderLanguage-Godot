@@ -1,0 +1,52 @@
+//! EXPECT: valid
+//! KERNELS: macroKernel
+//
+// Preprocessor stress test: diamond includes with #ifdef guards, nested
+// function-macro expansion, multi-line macros, #undef + redefine,
+// #ifdef/#else in both directions, macros in kernel dims and array sizes.
+
+#include "../includes/math_common.fsl"
+#include "../includes/level2.fsl"
+
+#define TILE 8
+#define DOUBLE(x) ((x) + (x))
+#define MAD(a, b, c) ((a) * (b) + (c))
+// nested expansion: uses DOUBLE, HALF (from include), and MAD
+#define COMPOSE(x) MAD(DOUBLE(x), HALF(x), PI)
+// multi-line macro with continuations, calling an included function
+#define LONG_EXPR(a, b) ((a) * (b) + \
+    (a) / ((b) + 1.0) - \
+    sqr((a) - (b)))
+
+#define FEATURE_A
+#ifdef FEATURE_A
+#define MODE 1
+#else
+#define MODE 2
+#endif
+
+#ifdef FEATURE_B
+const float branch_val = this_branch_is_disabled_and_never_parsed;
+#else
+const float branch_val = 2.0;
+#endif
+
+#define LIMIT 4
+#undef LIMIT
+#define LIMIT 16
+
+layout(std430) buffer macroBuf {
+    float[TILE * TILE] scratch;
+    float[] rest;
+};
+
+shared float[DOUBLE(TILE)] cache;
+
+kernel[TILE, TILE, 1] macroKernel(id : GlobalInvocationID, l : LocalInvocationID) {
+    float v = COMPOSE(float(id.x));
+    v += LONG_EXPR(v, branch_val) * float(MODE) + float(LIMIT);
+    v += quad(branch_val) + cmul(float2(v, 1.0), float2(1.0, v)).x;
+    cache[l.x] = v;
+    scratch[l.y * uint(TILE) + l.x] = cache[l.x];
+    rest[id.x + id.y * uint(TILE)] = v;
+}

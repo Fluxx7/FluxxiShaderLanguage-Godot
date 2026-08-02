@@ -30,7 +30,7 @@ protected:
     
     HashMap<StringName, KernelDef> compute_kernels;
     StringName path;
-    fslAST currAst;
+    AST::fslAST currAst;
 public:
     FSLFile(String file_path);
 

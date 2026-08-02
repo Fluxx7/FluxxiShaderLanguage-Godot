@@ -1,0 +1,9 @@
+//! EXPECT: validation_error
+// else with no preceding if. The parser builds a permissive AST (ElseNode
+// can exist standalone); the validator must reject an else that does not
+// follow an if.
+
+kernel[1, 1, 1] strayElse() {
+    float x = 1.0;
+    else { x = 2.0; }
+}

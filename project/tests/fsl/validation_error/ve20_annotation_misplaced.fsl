@@ -1,0 +1,15 @@
+//! EXPECT: validation_error
+// specialization_constant is only valid on const globals, not on functions.
+// Placement is validated semantically, not grammatically.
+
+layout(std430) buffer sinkBuf {
+    float[] sink;
+};
+
+float helper(float x) : specialization_constant {
+    return x * 2.0;
+}
+
+kernel[1, 1, 1] annotationMisplaced() {
+    sink[0] = helper(1.0);
+}

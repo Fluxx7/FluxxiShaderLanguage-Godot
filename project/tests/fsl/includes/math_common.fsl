@@ -1,0 +1,20 @@
+// Shared helper include for the test suite.
+// Include guard built from #ifdef/#else, since #ifndef is not in the language (yet).
+// This file is included twice (directly and via level2.fsl) to stress diamond includes.
+#ifdef MATH_COMMON_INCLUDED
+#else
+#define MATH_COMMON_INCLUDED
+
+const float PI = 3.14159265358979;
+
+#define HALF(x) ((x) * 0.5)
+
+float sqr(float x) {
+    return x * x;
+}
+
+float2 cmul(float2 a, float2 b) {
+    return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
+
+#endif

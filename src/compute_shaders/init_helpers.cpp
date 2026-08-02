@@ -26,16 +26,15 @@ Ref<FSLResource> _init_texture(const TextureInfo &tex_info, RenderingDevice *rd)
 
 Ref<FSLResource> init_resource(const ResourceInfo &res_info, RenderingDevice *rd) {
     Ref<FSLResource> new_resource = Ref<FSLResource>();
-    std::visit(overload{
-            [&](const BufferInfo &buf_info) {
-                new_resource = _init_buffer(buf_info, rd);
-            },
-            [&](const TextureInfo &tex_info) {
-                new_resource = _init_texture(tex_info, rd);
-            },
-            [&](const VariableInfo &var_info)  {
-                print_error("\t\tHow the fuck");
-            }
-    }, res_info.type_info);
+    match(res_info.type_info, 
+        [&](const BufferInfo &buf_info) {
+            new_resource = _init_buffer(buf_info, rd);
+        },
+        [&](const TextureInfo &tex_info) {
+            new_resource = _init_texture(tex_info, rd);
+        },
+        [&](const VariableInfo &var_info)  {
+            print_error("\t\tHow the fuck");
+        });
 	return new_resource;
 }

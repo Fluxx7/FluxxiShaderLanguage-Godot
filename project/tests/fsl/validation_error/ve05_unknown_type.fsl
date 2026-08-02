@@ -1,0 +1,12 @@
+//! EXPECT: validation_error
+// Declaration with a misspelled type name. Grammatically fine (types are
+// identifiers to the parser); the validator must reject the unknown type.
+
+layout(std430) buffer sinkBuf {
+    float[] sink;
+};
+
+kernel[1, 1, 1] unknownType() {
+    flaot x = 1.0;
+    sink[0] = x;
+}

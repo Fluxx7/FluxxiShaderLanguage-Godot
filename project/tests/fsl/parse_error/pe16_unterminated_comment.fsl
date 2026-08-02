@@ -1,0 +1,9 @@
+//! EXPECT: parse_error
+// Block comment opened but never closed.
+
+const float x = 1.0;
+
+/* this comment never ends
+kernel[1, 1, 1] neverParsed() {
+    float y = x;
+}

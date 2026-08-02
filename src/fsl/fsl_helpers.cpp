@@ -1,7 +1,7 @@
 #include "fsl_defs.h"
 
 
-godot::String bufferType_to_string(BufferType buf_type) {
+String bufferType_to_string(BufferType buf_type) {
 	switch (buf_type) {
         case UNIFORM:
             return "uniform";
@@ -10,7 +10,7 @@ godot::String bufferType_to_string(BufferType buf_type) {
     }
 }
 
-godot::String bufferFormat_to_string(BufferFormat buf_format) {
+String bufferFormat_to_string(BufferFormat buf_format) {
 	switch (buf_format) {
         case STD140:
             return "std140";
@@ -23,7 +23,7 @@ godot::String bufferFormat_to_string(BufferFormat buf_format) {
     }
 }
 
-godot::String get_buffer_desc(BufferType buf_type, BufferFormat buf_format) {
+String get_buffer_desc(BufferType buf_type, BufferFormat buf_format) {
     if (buf_type == UNIFORM) {
         if (buf_format == STD140) {
             return "Uniform buffer with format std140";
@@ -43,7 +43,7 @@ godot::String get_buffer_desc(BufferType buf_type, BufferFormat buf_format) {
 	return "Invalid buffer";
 }
 
-godot::String textureType_to_string(TextureType tex_type) {
+String textureType_to_string(TextureType tex_type) {
 	switch (tex_type) {
         case TEXTURE2D:
             return "Texture2D";
@@ -52,7 +52,7 @@ godot::String textureType_to_string(TextureType tex_type) {
     }
 }
 
-godot::String textureFormat_to_string(TextureFormat tex_format) {
+String textureFormat_to_string(TextureFormat tex_format) {
 	switch (tex_format) {
         case RGBA16F:
             return "rgba16f";
@@ -61,8 +61,8 @@ godot::String textureFormat_to_string(TextureFormat tex_format) {
     }
 }
 
-godot::String fslBaseType_to_string(FSLBaseType base_type) {
-	godot::String out_string = "";
+String fslBaseType_to_string(FSLBaseType base_type) {
+	String out_string = "";
     std::visit(overload{
         [&](FSLCoreType &core_type) {
             switch (core_type.primitive) {
@@ -103,8 +103,8 @@ godot::String fslBaseType_to_string(FSLBaseType base_type) {
     return out_string;
 };
 
-godot::String fslType_to_string(FSLType type) {
-    godot::String out_string = "";
+String fslType_to_string(FSLType type) {
+    String out_string = "";
     std::visit(overload{
         [&](FSLBaseType &base_type) {
             out_string += fslBaseType_to_string(base_type);
@@ -113,7 +113,7 @@ godot::String fslType_to_string(FSLType type) {
             out_string += fslBaseType_to_string(array.base_type);
             for (auto size : array.dimensions) {
                 if (size > 0) {
-                    out_string += godot::vformat("[%d]", size);
+                    out_string += vformat("[%d]", size);
                 } else {
                     out_string += "[]";
                 }
@@ -123,11 +123,11 @@ godot::String fslType_to_string(FSLType type) {
     return out_string;
 }
 
-godot::Variant get_fsl_basetype_default_value(const FSLBaseType &base_type) {
-    godot::Variant out_defval = 0;
+Variant get_fsl_basetype_default_value(const FSLBaseType &base_type) {
+    Variant out_defval = 0;
     std::visit(overload{
         [&](const FSLCoreType &core_type) {
-            godot::Variant primitive_defval;
+            Variant primitive_defval;
             switch (core_type.primitive) {
                 case FLOAT:
                     primitive_defval = 0.0f;
@@ -150,13 +150,13 @@ godot::Variant get_fsl_basetype_default_value(const FSLBaseType &base_type) {
                     out_defval = primitive_defval;
                     break;
                 case TWO:
-                    out_defval = godot::Array({primitive_defval, primitive_defval});
+                    out_defval = Array({primitive_defval, primitive_defval});
                     break;
                 case THREE:
-                    out_defval = godot::Array({primitive_defval, primitive_defval, primitive_defval});
+                    out_defval = Array({primitive_defval, primitive_defval, primitive_defval});
                     break;
                 case FOUR:
-                    out_defval = godot::Array({primitive_defval, primitive_defval, primitive_defval, primitive_defval});
+                    out_defval = Array({primitive_defval, primitive_defval, primitive_defval, primitive_defval});
                     break;
             }
         },
@@ -167,20 +167,19 @@ godot::Variant get_fsl_basetype_default_value(const FSLBaseType &base_type) {
     return out_defval;
 }
 
-godot::Variant get_fsl_default_value(const FSLType &fsl_type) {
-    godot::Variant out_defval = 0;
-    std::visit(overload{
+Variant get_fsl_default_value(const FSLType &fsl_type) {
+    Variant out_defval = 0;
+    match(fsl_type, 
         [&](const FSLBaseType &base_type) {
             out_defval = get_fsl_basetype_default_value(base_type);
         },
         [&](const FSLArray &array) {
-            godot::Variant item_defval = get_fsl_basetype_default_value(array.base_type);
+            Variant item_defval = get_fsl_basetype_default_value(array.base_type);
             out_defval = item_defval;
             for (auto size : array.dimensions) {
                 
             }
-        }
-    }, fsl_type);
+        });
     return out_defval;
 }
 
@@ -198,21 +197,20 @@ uint32_t get_fsl_primitive_size(FSLPrimitive primitive) {
 
 uint32_t get_fsl_base_type_size(const FSLBaseType &base_type) {
     uint32_t out_size = 0;
-    std::visit(overload{
+    match(base_type, 
         [&](const FSLCoreType &core_type) {
             uint32_t primitive_size = get_fsl_primitive_size(core_type.primitive);
             out_size = primitive_size * core_type.vec_size;
         },
         [&](const FSLStruct &array) {
             // not my problem right now tbh
-        }
-    }, base_type);
+        });
     return out_size;
 }
 
 uint32_t get_fsl_type_size(const FSLType &fsl_type, uint32_t unsized_count) {
     uint32_t out_size = 0;
-    std::visit(overload{
+    match(fsl_type,
         [&](const FSLBaseType &base_type) {
             out_size = get_fsl_base_type_size(base_type);
         },
@@ -225,14 +223,13 @@ uint32_t get_fsl_type_size(const FSLType &fsl_type, uint32_t unsized_count) {
                     out_size *= unsized_count;
                 }
             }
-        }
-    }, fsl_type);
+        });
     return out_size;
 }
 
 uint32_t get_fsl_base_type_alignment(const FSLBaseType &base_type, BufferFormat format) {
     uint32_t alignment = 0;
-    std::visit(overload{
+    match(base_type, 
         [&](const FSLCoreType &core_type) {
             uint32_t primitive_size = get_fsl_primitive_size(core_type.primitive);
             uint32_t vec_coeff = core_type.vec_size == 3 ? 4 : core_type.vec_size;
@@ -240,14 +237,13 @@ uint32_t get_fsl_base_type_alignment(const FSLBaseType &base_type, BufferFormat 
         },
         [&](const FSLStruct &struct_type) {
             // also not my problem rn
-        }
-    }, base_type);
+        });
     return alignment;
 }
 
 uint32_t get_fsl_type_alignment(const FSLType &fsl_type, uint32_t unsized_count, BufferFormat format) {
     uint32_t alignment = 0;
-    std::visit(overload{
+    match(fsl_type, 
         [&](const FSLBaseType &base_type) {
             alignment = get_fsl_base_type_alignment(base_type, format);
         },
@@ -263,13 +259,12 @@ uint32_t get_fsl_type_alignment(const FSLType &fsl_type, uint32_t unsized_count,
                     alignment *= unsized_count;
                 }
             }
-        }
-    }, fsl_type);
+        });
     return alignment;
 }
 
-godot::PackedByteArray fsl_core_type_to_bytes(const FSLCoreType &base_type, godot::Variant value) {
-    godot::PackedByteArray out_bytes = {};
+PackedByteArray fsl_core_type_to_bytes(const FSLCoreType &base_type, Variant value) {
+    PackedByteArray out_bytes = {};
     out_bytes.resize(get_fsl_base_type_size(base_type));
     if (base_type.vec_size == ONE) {
         switch (base_type.primitive) {
@@ -313,78 +308,63 @@ godot::PackedByteArray fsl_core_type_to_bytes(const FSLCoreType &base_type, godo
 	return out_bytes;
 }
 
-godot::PackedByteArray fsl_base_type_to_bytes(const FSLBaseType &base_type, godot::Variant value) {
-    godot::PackedByteArray out_bytes = {};
-    std::visit(overload{
+PackedByteArray fsl_base_type_to_bytes(const FSLBaseType &base_type, Variant value) {
+    PackedByteArray out_bytes = {};
+    match(base_type, 
         [&](const FSLCoreType &core_type) {
             out_bytes = fsl_core_type_to_bytes(core_type, value);
         },
         [&](const FSLStruct &struct_type) {
             // not my problem right now
-        }
-    }, base_type);
+        });
 	return out_bytes;
 }
 
-godot::PackedByteArray fsl_type_to_bytes(const FSLType &fsl_type, godot::Variant value) {
-    godot::PackedByteArray out_bytes = {};
-    std::visit(overload{
+PackedByteArray fsl_type_to_bytes(const FSLType &fsl_type, Variant value) {
+    PackedByteArray out_bytes = {};
+    match(fsl_type, 
         [&](const FSLBaseType &base_type) {
             out_bytes = fsl_base_type_to_bytes(base_type, value);
         },
         [&](const FSLArray &array) {
-            godot::Array array_val = (godot::Array) value;
+            Array array_val = (Array) value;
             if (array_val.size() == 0) {
                 ERR_PRINT("Invalid or empty array provided");
                 return;
             }
             for (const auto& item : array_val) {
             }
-        }
-    }, fsl_type);
+        });
 	return out_bytes;
 }
 
-godot::Variant fsl_core_type_to_variant(const FSLCoreType &core_type) {
+// Variant fsl_core_type_to_variant(const FSLCoreType &core_type) {
     
-}
+// }
 
-godot::Variant fsl_base_type_to_variant(const FSLBaseType &base_type) {
-    godot::Variant output;
-    std::visit(overload{
-        [&](const FSLCoreType &core_type) {
-            output = fsl_core_type_to_variant(core_type);
-        },
-        [&](const FSLStruct &struct_type) {
-            // not my problem right now
-        }
-    }, base_type);
-    return output;
-}
+// Variant fsl_base_type_to_variant(const FSLBaseType &base_type) {
+//     Variant output;
+//     std::visit(overload{
+//         [&](const FSLCoreType &core_type) {
+//             output = fsl_core_type_to_variant(core_type);
+//         },
+//         [&](const FSLStruct &struct_type) {
+//             // not my problem right now
+//         }
+//     }, base_type);
+//     return output;
+// }
 
-godot::Variant fsl_type_to_variant(const FSLType &fsl_type) {
-    godot::Variant output;
-    std::visit(overload{
-        [&](const FSLBaseType &base_type) {
-            output = fsl_base_type_to_variant(base_type);
-        },
-        [&](const FSLArray &array) {
-            // for (const auto& item : array_val) {
-            // }
-        }
-    }, fsl_type);
-    return output;
-}
-
-
-// using godot::Variant;
-// bool variant_matches_fsl_type(const FSLType &fsl_type, const godot::Variant &gvariant) {
-//     switch (gvariant.get_type()) {
-//         case Variant::FLOAT:
-//         case Variant::INT:
-//         case Variant::
-//         case Variant::BOOL:
-//         case Variant::VECTOR2:
-//     }
-// 	return false;
+// Variant fsl_type_to_variant(const FSLType &fsl_type) {
+//     Variant output;
+//     std::visit(overload{
+//         [&](const FSLBaseType &base_type) {
+//             output = fsl_base_type_to_variant(base_type);
+//         },
+//         [&](const FSLArray &array) {
+//             // for (const auto& item : array_val) {
+//             // }
+//         }
+//     }, fsl_type);
+//     return output;
 // }

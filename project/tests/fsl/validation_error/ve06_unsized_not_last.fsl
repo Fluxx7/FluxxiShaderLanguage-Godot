@@ -1,0 +1,11 @@
+//! EXPECT: validation_error
+// Unsized array must be the last member of a buffer block.
+
+layout(std430) buffer badLayout {
+    float[] tail_first;
+    float after;
+};
+
+kernel[1, 1, 1] unsizedNotLast() {
+    tail_first[0] = after;
+}

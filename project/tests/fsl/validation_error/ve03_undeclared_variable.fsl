@@ -1,0 +1,10 @@
+//! EXPECT: validation_error
+// Reads a variable that was never declared anywhere.
+
+layout(std430) buffer sinkBuf {
+    float[] sink;
+};
+
+kernel[1, 1, 1] undeclaredVar() {
+    sink[0] = never_declared_anywhere;
+}

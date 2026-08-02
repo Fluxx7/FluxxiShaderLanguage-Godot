@@ -1,4 +1,5 @@
 #include "../fsl_texture.h"
+#include "fsl_texture.h"
 
 /**********************************************************/
 /******************* FSLTexture2DArray ********************/
@@ -7,6 +8,7 @@
 void FSLTexture2DArray::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_texture", "tex_width", "tex_height", "index", "image"), &FSLTexture2DArray::set_texture, DEFVAL(nullptr));
     ClassDB::bind_method(D_METHOD("set_textures", "tex_width", "tex_height", "tex_count", "images"), &FSLTexture2DArray::set_textures, DEFVAL(TypedArray<Ref<Image>>()));
+    ClassDB::bind_method(D_METHOD("get_mip_view", "mip_level"), &FSLTexture2DArray::get_mip_view);
 }
 
 void FSLTexture2DArray::_rebuild() {
@@ -20,6 +22,7 @@ void FSLTexture2DArray::_rebuild() {
     rd_tex_format->set_array_layers(count);
     rd_tex_format->set_texture_type(RenderingDevice::TextureType::TEXTURE_TYPE_2D_ARRAY);
     auto format = texture_info.format == RGBA16F ? RenderingDevice::DATA_FORMAT_R16G16B16A16_SFLOAT : RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT;
+    rd_tex_format->set_mipmaps(texture_info.mip_count);
     rd_tex_format->set_format(format);
     rd_tex_format->set_usage_bits(flag_long);
     if (data.size() != 0) {
@@ -86,6 +89,15 @@ void FSLTexture2DArray::set_texture(uint32_t tex_width, uint32_t tex_height, uin
         rd->texture_update(rid, index, image->get_data());
     }
 }
+
+Ref<FSLTextureView> FSLTexture2DArray::get_mip_view(uint32_t mip_level) {
+	return FSLTextureView::new_mip_view(rd, this, mip_level, static_cast<RenderingDevice::TextureSliceType>(3));
+}
+
+Ref<FSLTextureView> FSLTexture2DArray::get_mip_layer_view(uint32_t mip_level, uint32_t layer) {
+	return FSLTextureView::new_mip_layer_view(rd, this, mip_level, layer, RenderingDevice::TEXTURE_SLICE_2D);
+}
+
 Ref<RDUniform> FSLTexture2DArray::get_rd_uniform(uint32_t binding, bool &needs_rebuild) {
 	needs_rebuild |= rebuilt;
     rebuilt = false;

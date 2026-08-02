@@ -1,0 +1,19 @@
+//! EXPECT: valid
+//! KERNELS: fmtKernel
+//
+// Formatting/comment stress test: block comments jammed between tokens,
+// adjacent comments, unicode in comments, minimal whitespace, excess
+// whitespace, tabs, whole constructs on one line, empty blocks.
+
+/* block comment
+   spanning lines *//* immediately adjacent block */// then a line comment
+// ünïcödé çömmént ✓ 数学 test
+
+layout(std430)/*mid*/buffer/*comments*/fmtBuf{float[]fmt_out;};
+
+const/*c*/float/*c*/squeezed=1.;
+	const float 	spaced   =   .5   ;
+
+const float deep = ((((((((((((((((1.0)))))))))))))))) ;
+
+kernel[4,4,1]fmtKernel(g:GlobalInvocationID,float t){fmt_out[g.x]=squeezed+spaced+deep+t;if(t>0.0){}else{}}

@@ -1,0 +1,9 @@
+//! EXPECT: parse_error
+// A declaration that starts with a specifier must be a variable declaration,
+// so a missing name here is a structural error the parser itself reports
+// (unlike a bare `float = 3.0;`, which parses as a variable reference and is
+// left to the validator — see ve25).
+
+kernel[1, 1, 1] specifierNoName() {
+    const float = 3.0;
+}

@@ -1,11 +1,8 @@
 #pragma once
-#include "godot_cpp/core/defs.hpp"
-#include "godot_cpp/variant/string.hpp"
-#include "godot_cpp/templates/local_vector.hpp"
-#include <functional>
+#include "std_imports.h"
+#include "godot_imports.h"
 #include "../fsl_defs.h"
 #include "utilities/slice.h"
-#include <optional>
 
 using namespace godot;
 
@@ -32,12 +29,12 @@ struct Token {
         SYMBOL_AND,
         SYMBOL_STAR,
 
-        SYMBOL_LEFTBRACE,
-        SYMBOL_RIGHTBRACE,
-        SYMBOL_LEFTBRACKET,
-        SYMBOL_RIGHTBRACKET,
-        SYMBOL_LEFTPAREN,
-        SYMBOL_RIGHTPAREN,
+        BRACE_OPEN,
+        BRACE_CLOSE,
+        BRACKET_OPEN,
+        BRACKET_CLOSE,
+        PAREN_OPEN,
+        PAREN_CLOSE,
 
         SYMBOL_POUND,
         SYMBOL_PERCENT,
@@ -68,11 +65,15 @@ struct Token {
         KEYWORD_IF,
         KEYWORD_ELSE,
         KEYWORD_FOR,
+        KEYWORD_WHILE,
         KEYWORD_UNIFORM,
         KEYWORD_BUFFER,
         KEYWORD_RETURN,
+        KEYWORD_CONTINUE,
+        KEYWORD_BREAK,
+        
 
-        // COMPLEX TYPES
+        // OPAQUE TYPES
         TYPE_IMAGE2D,
         TYPE_IMAGE2DARRAY,
 
@@ -88,6 +89,7 @@ struct Token {
         IDENTIFIER,
         INTEGER,
         NUMBER,
+        LITERAL,
 
         // used by parser
         ERR_EOS,
@@ -96,19 +98,19 @@ struct Token {
         ERR_TOKEN, 
     };
     enum TokenCategory {
-        CATEGORY_WHITESPACE,
-        CATEGORY_SYMBOL_OP,
-        CATEGORY_SYMBOL_OTHER,
-        CATEGORY_SPECIFIER,
-        CATEGORY_GLOBAL_KEYWORD,
-        CATEGORY_STATEMENT_KEYWORD,
-        CATEGORY_COMPLEX_TYPE,
-        CATEGORY_TEXTUREFORMAT,
-        CATEGORY_BUFFERFORMAT,
-        CATEGORY_IDENTIFIER,
-        CATEGORY_NUMBER,
-        CATEGORY_OTHER,
-        CATEGORY_ERR,
+        CATEGORY_WHITESPACE = 1,
+        CATEGORY_SYMBOL_OP = 2,
+        CATEGORY_SYMBOL_OTHER = 4,
+        CATEGORY_SPECIFIER = 8,
+        CATEGORY_GLOBAL_KEYWORD = 16,
+        CATEGORY_STATEMENT_KEYWORD = 32,
+        CATEGORY_OPAQUE_TYPE = 64,
+        CATEGORY_TEXTUREFORMAT = 128,
+        CATEGORY_BUFFERFORMAT = 256,
+        CATEGORY_IDENTIFIER = 512,
+        CATEGORY_LITERAL = 1024,
+        CATEGORY_OTHER = 2048,
+        CATEGORY_ERR = 4096,
     };
     String contents;
     TokenType token_type;
@@ -125,64 +127,71 @@ struct TokenScope {
     const Token* open = nullptr;
     const Token* close = nullptr;
     LocalVector<TokenTree> scope_contents;
+    const Token* eof_sentinel() const;
     const LocalVector<const Token*> flatten() const;
     const void flatten(LocalVector<const Token*>& flat_tokens) const;
 };
 
 class TokenTree {
 public:
-    std::variant<const Token*, TokenScope> node;
+    sumtype<const Token*, TokenScope> node;
     TokenTree() = default;
     TokenTree(const Token* token) { node = token; }
     TokenTree(const TokenScope& scope) { node = scope; }
     TokenTree(TokenScope&& scope) { node = scope; }
     Token::TokenType get_type() const {
-        if(const Token* const* token = std::get_if<const Token*>(&node)) {
-            return (*token)->token_type;
-        } else {
-            const TokenScope& scope = std::get<TokenScope>(node);
-            return scope.open->token_type;
-        }
+        return match(node,
+            [&](const Token* token) {
+                return token->token_type;
+            },
+            [&](const TokenScope& scope) {
+                return scope.open->token_type;
+            });
     }
     Token::TokenCategory get_category() const {
-        if(const Token* const* token = std::get_if<const Token*>(&node)) {
-            return (*token)->category;
-        } else {
-            const TokenScope& scope = std::get<TokenScope>(node);
-            return scope.open->category;
-        }
+        return match(node,
+            [&](const Token* token) {
+                return token->category;
+            },
+            [&](const TokenScope& scope) {
+                return scope.open->category;
+            });
     }
     TokenDebugInfo get_debug_info() const {
-        if(const Token* const* token = std::get_if<const Token*>(&node)) {
-            return (*token)->debug_info;
-        } else {
-            const TokenScope& scope = std::get<TokenScope>(node);
-            return scope.open->debug_info;
-        }
+        return match(node,
+            [&](const Token* token) {
+                return token->debug_info;
+            },
+            [&](const TokenScope& scope) {
+                return scope.open->debug_info;
+            });
     }
     String get_contents() const {
-        if(const Token* const* token = std::get_if<const Token*>(&node)) {
-            return (*token)->contents;
-        } else {
-            const TokenScope& scope = std::get<TokenScope>(node);
-            return scope.open->contents;
-        }
+        return match(node,
+            [&](const Token* token) {
+                return token->contents;
+            },
+            [&](const TokenScope& scope) {
+                return scope.open->contents;
+            });
     }
     const Token* get_token() const {
-        if (const Token* const* tok = std::get_if<const Token*>(&node)) {
-            return *tok;
-        } else {
-            const TokenScope& scope = std::get<TokenScope>(node);
-            return scope.open;
-        }
+        return match(node,
+            [&](const Token* token) {
+                return token;
+            },
+            [&](const TokenScope& scope) {
+                return scope.open;
+            });
     }
     bool has_leading_whitespace() const {
-        if (const Token* const* tok = std::get_if<const Token*>(&node)) {
-            return (*tok)->has_leading_whitespace;
-        } else {
-            const TokenScope& scope = std::get<TokenScope>(node);
-            return scope.open->has_leading_whitespace;
-        }
+        return match(node,
+            [&](const Token* token) {
+                return token->has_leading_whitespace;
+            },
+            [&](const TokenScope& scope) {
+                return scope.open->has_leading_whitespace;
+            });
     }
     void flatten(LocalVector<const Token*>& tokens) const;
     const LocalVector<const Token*> flatten() const;
@@ -190,11 +199,51 @@ public:
 
 
 
-class TokenStream : Stream<TokenTree> {
+class TokenStream {
 protected:
+    class SliceBuilder {
+    protected:
+        uint32_t start;
+        uint32_t length = 0;
+    public:
+        SliceBuilder(uint32_t _start) : start(_start) {};
+        Slice<TokenTree> get_slice(const TokenStream& parent) const {
+            return parent.get_slice(start, length);
+        }
+        TokenStream get_stream(const TokenStream& parent) const {
+            return parent.get_slice(start, length).get_stream();
+        }
+        void add() {
+            length++;
+        }
+        void reset(uint32_t _start) {
+            start = _start;
+            length = 0;
+        }
+    };
+    stack<Stream<TokenTree>> streams;
     const TokenTree& eof_sentinel() const;
     TokenDebugInfo last_debug_info;
+    SliceBuilder builder = SliceBuilder(0);
+    const TokenTree* _consume();
+    template<typename T>
+    bool _expect(const T& lhs, const T& rhs) {
+        if (lhs == rhs) {
+            _consume();
+            return true;
+        }
+        return false;
+    }
+    template<typename T>
+    bool _expect_not(const T& lhs, const T& rhs) {
+        if (lhs != rhs) {
+            _consume();
+            return true;
+        }
+        return false;
+    }
 public:
+    
     operator const TokenTree&() {
         return peek();
     }
@@ -202,9 +251,14 @@ public:
         return &peek();
     }
 
-    bool ok() const { return Stream<TokenTree>::ok(); }
-    bool at_end() const { return Stream<TokenTree>::at_end(); }
-    void reset() { index = start; errored = false; }
+    bool ok() const { return streams.top().ok(); }
+    bool at_end() const { return streams.top().at_end(); }
+    void reset() { 
+        while (streams.size() > 1) {
+            streams.pop();
+        }
+        streams.top().reset();
+    }
 
     const TokenTree& peek() const;
     const TokenTree& consume();
@@ -219,24 +273,66 @@ public:
     const TokenScope* expect_scope_brace();
     const TokenScope* expect_scope_bracket();
 
-    std::optional<TokenStream> descend(Token::TokenType scope_in, Token::TokenType scope_out, bool allow_leading_whitespace = true);
+    bool descend(Token::TokenType scope_in, Token::TokenType scope_out, bool allow_leading_whitespace = true);
     
-    std::optional<TokenStream> descend_paren(bool allow_leading_whitespace = true);
-    std::optional<TokenStream> descend_brace(bool allow_leading_whitespace = true);
-    std::optional<TokenStream> descend_bracket(bool allow_leading_whitespace = true);
-    uint32_t get_index() { return index; };
+    bool descend_paren(bool allow_leading_whitespace = true);
+    bool descend_brace(bool allow_leading_whitespace = true);
+    bool descend_bracket(bool allow_leading_whitespace = true);
 
-    Slice<TokenTree> get_slice(uint32_t _start, uint32_t len);
-    TokenStream trim() const {
-        return TokenStream(source, index, end);
+    void ascend() {
+        if (streams.size() > 1) {
+            streams.pop();
+        }
+    }
+
+    uint32_t get_index() { return streams.top().get_index(); };
+
+    void start_slice() {
+        builder.reset(get_index());
+    }
+
+    Slice<TokenTree> get_slice() const {
+        return builder.get_slice(*this);
+    }
+
+    TokenStream get_stream() const {
+        return builder.get_stream(*this);
+    }
+
+    Slice<TokenTree> get_slice(uint32_t _start, uint32_t len) const;
+
+    TokenStream clip() const {
+        return TokenStream(streams.top(), streams.top().get_index());
+    }
+
+    TokenStream clip_and_ascend() {
+        auto out = TokenStream(streams.top(), streams.top().get_index());
+        ascend();
+        return out;
     }
 
     template<Token::TokenType end_tok>
-    bool consume_until(std::function<void(const Token*)> func) {
+    bool consume_until(bool consume_last = true) {
         while (!at_end()) {
             switch (peek().get_type()) {
                 case end_tok: {
+                    if (consume_last) consume();
+                    return true;
+                } break;
+                default: 
                     consume();
+                    break;
+            }
+        }
+        return false;
+    }
+
+    template<Token::TokenType end_tok>
+    bool consume_until(std::function<void(const Token*)> func, bool consume_last = true) {
+        while (!at_end()) {
+            switch (peek().get_type()) {
+                case end_tok: {
+                    if (consume_last) consume();
                     return true;
                 } break;
                 default: 
@@ -248,14 +344,16 @@ public:
     }
 
     template<Token::TokenType end_tok>
-    bool consume_until(std::function<void()> func) {
+    bool consume_until(std::function<void()> func, bool consume_last = true) {
         while (!at_end()) {
-            auto& tok = consume();
+            auto& tok = peek();
             switch (tok.get_type()) {
                 case end_tok: {
+                    if (consume_last) consume();
                     return true;
                 } break;
                 default: 
+                    consume();
                     func();
                     break;
             }
@@ -264,7 +362,22 @@ public:
     }
 
     TokenStream() = default;
-    TokenStream(Stream<TokenTree>&& _root) : Stream<TokenTree>(std::move(_root)) { }
+    TokenStream(Stream<TokenTree> source) {
+        streams.push(source);
+    }
+    TokenStream(Stream<TokenTree> source, uint32_t start) {
+        streams.push(Stream<TokenTree>(source, start));
+    }
+    template<typename T, typename std::enable_if_t<std::is_same_v<std::decay_t<T>, Stream<TokenTree>>>>
+    TokenStream(T&& _root) { 
+        streams.push(Stream<TokenTree>(std::forward<T>(_root)));
+    }
+    template<typename T, typename std::enable_if_t<std::is_same_v<std::decay_t<T>, Stream<TokenTree>>>>
+    TokenStream(T&& _root, uint32_t start) { 
+        streams.push(Stream<TokenTree>(std::forward<T>(_root), start));
+    }
 
-    TokenStream(Span<TokenTree> _source, uint32_t start, uint32_t _end) : Stream<TokenTree>(_source, start, _end) { }
+    TokenStream(Span<TokenTree> _source, uint32_t start, uint32_t _end)  {
+        streams.push(Stream<TokenTree>(_source, start, _end));
+    } 
 };

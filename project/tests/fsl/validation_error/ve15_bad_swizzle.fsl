@@ -1,0 +1,11 @@
+//! EXPECT: validation_error
+// Swizzle component out of range for the vector width.
+
+layout(std430) buffer sinkBuf {
+    float[] sink;
+};
+
+kernel[1, 1, 1] badSwizzle() {
+    float2 v = float2(1.0, 2.0);
+    sink[0] = v.z;
+}

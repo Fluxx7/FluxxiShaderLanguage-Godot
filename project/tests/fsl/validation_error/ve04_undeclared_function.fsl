@@ -1,0 +1,10 @@
+//! EXPECT: validation_error
+// Calls a function that is neither declared nor a builtin.
+
+layout(std430) buffer sinkBuf {
+    float[] sink;
+};
+
+kernel[1, 1, 1] undeclaredFunc() {
+    sink[0] = mysteryFunction(1.0);
+}

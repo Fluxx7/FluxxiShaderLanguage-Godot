@@ -1,0 +1,14 @@
+//! EXPECT: validation_error
+// Two resources declared with the same block name.
+
+layout(std430) buffer clashing {
+    float[] a;
+};
+
+layout(std430) buffer clashing {
+    uint[] b;
+};
+
+kernel[1, 1, 1] duplicateResource() {
+    a[0] = 1.0;
+}

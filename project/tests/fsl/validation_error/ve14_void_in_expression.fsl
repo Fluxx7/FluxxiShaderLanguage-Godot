@@ -1,0 +1,15 @@
+//! EXPECT: validation_error
+// void function call used as a value.
+
+layout(std430) buffer sinkBuf {
+    float[] sink;
+};
+
+void doNothing() {
+    return;
+}
+
+kernel[1, 1, 1] voidInExpr() {
+    float x = doNothing();
+    sink[0] = x;
+}

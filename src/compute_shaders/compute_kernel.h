@@ -1,15 +1,11 @@
 #pragma once
 
-#include "godot_cpp/classes/ref_counted.hpp"
-#include "godot_cpp/templates/local_vector.hpp"
+#include "std_imports.h"
+#include "godot_imports.h"
+
 #include "godot_cpp/variant/typed_dictionary.hpp"
-#include "godot_cpp/templates/hash_map.hpp"
-#include "godot_cpp/templates/a_hash_map.hpp"
 #include "godot_cpp/classes/rd_shader_source.hpp"
 #include "godot_cpp/classes/rd_shader_spirv.hpp"
-
-#include <optional>
-#include <variant>
 
 #include "fsl/fsl_defs.h"
 #include "resources/fsl_buffer.h"
@@ -22,11 +18,16 @@ using namespace godot;
 class ComputeKernel : public RefCounted {
     GDCLASS(ComputeKernel, RefCounted)
 public:
+    struct SpecializationConstant {
+        uint32_t constant_id;
+        uint32_t value;
+    };
     struct KernelInfo {
         StringName kernel_name;
         HashMap<StringName, ResourceInfo> bindings;
         HashMap<StringName, VariableInfo> push_constants;
-        uint32_t local_invocations[3];
+        HashMap<StringName, SpecializationConstant> specialization_constants;
+        sumtype<uint32_t, StringName> local_invocations[3];
     };
 
 private:
@@ -51,6 +52,7 @@ protected:
         ERR_FAIL_COND_V_MSG(typed_res.is_null(), Ref<T>(), vformat("Resource \'%s\' is a %s, not a %s", (*res)->get_class(), T::get_class_static()));
         return typed_res;
     }
+    uint32_t get_min_workgroup_count(sumtype<uint32_t, StringName> local_invocation_var, uint32_t requested_invocations);
 public:
     ComputeKernel() = default;
     RenderingDevice* kernel_rd;
@@ -134,4 +136,5 @@ public:
     void dispatch();
     Ref<ComputePlan> add_barrier(bool is_temp = false);
     Ref<ComputePlan> add_kernel(Ref<ComputeKernel> kernel, uint32_t x_invocations, uint32_t y_invocations, uint32_t z_invocations, TypedDictionary<StringName, Variant> push_constants = {}, bool is_temp = false);
+    Ref<ComputePlan> add_kernel_workgroups(Ref<ComputeKernel> kernel, uint32_t x_workgroups, uint32_t y_workgroups, uint32_t z_workgroups, TypedDictionary<StringName, Variant> push_constants = {}, bool is_temp = false);
 };

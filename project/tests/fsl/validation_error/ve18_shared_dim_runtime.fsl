@@ -1,0 +1,18 @@
+//! EXPECT: validation_error
+// Shared array dims may be comptime or pipeline constant, but never runtime:
+// sizing one from a buffer field must be rejected.
+
+layout(std430) buffer paramsBlock {
+    uint runtime_size;
+} params;
+
+layout(std430) buffer sinkBuf {
+    float[] sink;
+};
+
+shared float[params.runtime_size] cache;
+
+kernel[8, 1, 1] sharedDimRuntime(l : LocalInvocationID) {
+    cache[l.x] = float(l.x);
+    sink[l.x] = cache[l.x];
+}

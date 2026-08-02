@@ -1,0 +1,19 @@
+//! EXPECT: validation_error
+// Call site matches no overload: wrong argument count and wrong types.
+
+layout(std430) buffer sinkBuf {
+    float[] sink;
+};
+
+float combine(float a, float b) {
+    return a + b;
+}
+
+float2 combine(float2 a, float2 b) {
+    return a + b;
+}
+
+kernel[1, 1, 1] noMatchingOverload() {
+    sink[0] = combine(1.0);
+    sink[1] = combine(float3(1.0, 2.0, 3.0), 2.0).x;
+}

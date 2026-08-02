@@ -1,0 +1,13 @@
+//! EXPECT: validation_error
+// Adding a float2 to a float3.
+
+layout(std430) buffer sinkBuf {
+    float[] sink;
+};
+
+kernel[1, 1, 1] operatorMismatch() {
+    float2 a = float2(1.0, 2.0);
+    float3 b = float3(1.0, 2.0, 3.0);
+    float3 c = a + b;
+    sink[0] = c.x;
+}

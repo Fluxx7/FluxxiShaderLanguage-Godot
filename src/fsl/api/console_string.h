@@ -1,20 +1,10 @@
 #pragma once
-
-#include "godot_cpp/classes/ref_counted.hpp"
-#include "godot_cpp/templates/vector.hpp"
-#include "godot_cpp/templates/local_vector.hpp"
-#include "godot_cpp/templates/hash_map.hpp"
-#include "godot_cpp/templates/a_hash_map.hpp"
-#include "godot_cpp/classes/rd_shader_source.hpp"
-#include "godot_cpp/classes/rendering_server.hpp"
-#include <unordered_map>
+#include "godot_imports.h"
+#include "std_imports.h"
 
 #include "fsl/parsing/fsl_parser.h"
-#include "fsl/fsl_defs.h"
-#include "compute_shaders/compute_kernel.h"
-#include "compute_shaders/compute_group.h"
 
-using namespace godot;
+
 
 class ConsoleString {
 private:
@@ -22,7 +12,7 @@ private:
         Increment,
         Decrement,
     };
-    Vector<std::variant<String, Indent>> out_log;
+    Vector<sumtype<String, Indent>> out_log;
     String curr_string;
 public:
     template<typename... VarArgs>
@@ -35,34 +25,37 @@ public:
         curr_string += vformat(text, vargs...);
     }
     void add(ConsoleString&& console_string) {
-        console_string.flush();
-        if (console_string.out_log.is_empty()) {
+        if (!console_string.out_log.is_empty()) {
+            if(const String* first_string = get_if<String>(&console_string.out_log[0])) {
+                curr_string += *first_string;
+                console_string.out_log.remove_at(0);
+            }
+            flush();
+            out_log.append_array(std::move(console_string.out_log));
             return;
         }
-        if (const String* first_string = std::get_if<String>(&(console_string.out_log[0]))) {
-            curr_string += *first_string;
-            console_string.out_log.remove_at(0);
-            if (console_string.out_log.is_empty()) {
-                return;
-            }
+        if (!console_string.curr_string.is_empty()) {
+            curr_string += console_string.curr_string;
         }
-        flush();
-        out_log.append_array(std::move(console_string.out_log));
     }
     void add(const ConsoleString& console_string) {
-        Vector<std::variant<String, Indent>> string_list = console_string.out_log;
+        if (!console_string.out_log.is_empty()) {
+            Vector<std::variant<String, Indent>> string_list = console_string.out_log;
+            if(const String* first_string = get_if<String>(&string_list[0])) {
+                curr_string += *first_string;
+                string_list.remove_at(0);
+            }
+            flush();
+            out_log.append_array(std::move(string_list));
+        }
         if (!console_string.curr_string.is_empty()) {
-            string_list.append(console_string.curr_string);
+            curr_string += console_string.curr_string;
         }
-        if (string_list.is_empty()) {
-            return;
-        }
-        if (const String* first_string = std::get_if<String>(&(string_list[0]))) {
-            curr_string += *first_string;
-            string_list.remove_at(0);
-        }
+    }
+    template<typename T, typename = std::enable_if_t<std::is_same_v<std::decay_t<T>, ConsoleString>>>
+    void add_line(T&& console_string) {
+        add(std::forward<T>(console_string));
         flush();
-        out_log.append_array(std::move(string_list));
     }
 
     void flush() {
@@ -86,9 +79,9 @@ public:
     String get_output() const {
         String output = "";
         uint32_t curr_indent = 0; 
+
         for (const auto& str_or_int : out_log) {
-            std::visit(overload{
-                [&](String text) {
+            match(str_or_int, [&](String text) {
                     String indents = "";
                     for (auto i = 0; i < curr_indent; i++) {
                         indents += "\t";
@@ -101,40 +94,17 @@ public:
                     } else {
                         curr_indent -= 1;
                     }   
-                }
-            }, str_or_int);
+                });
         }
+
         String indents = "";
         for (auto i = 0; i < curr_indent; i++) {
             indents += "\t";
         }
-        output += vformat("%s%s\n", indents, curr_string);
+        output += vformat("%s%s", indents, curr_string);
         return output;
     }
     void print() const {
-        uint32_t curr_indent = 0; 
-        for (const auto& str_or_int : out_log) {
-            std::visit(overload{
-                [&](String text) {
-                    String indents = "";
-                    for (auto i = 0; i < curr_indent; i++) {
-                        indents += "\t";
-                    }
-                    printvf("%s%s", indents, text);
-                },
-                [&](Indent indent) {
-                    if (indent == Increment) {
-                        curr_indent += 1;
-                    } else {
-                        curr_indent -= 1;
-                    }   
-                }
-            }, str_or_int);
-        }
-        String indents = "";
-        for (auto i = 0; i < curr_indent; i++) {
-            indents += "\t";
-        }
-        printvf("%s%s", indents, curr_string);
+        printvf(get_output());
     }
 };

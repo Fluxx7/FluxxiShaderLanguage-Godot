@@ -1,0 +1,10 @@
+//! EXPECT: validation_error
+// Missing semicolon. By design the parser merges this into one operation
+// list (whitespace/newlines are gone after preprocessing); the validator
+// must reject the list's structure (variable declaration not at the start
+// of an operation list / literal followed directly by a declaration).
+
+kernel[8, 1, 1] noSemi(g : GlobalInvocationID) {
+    float a = 1.0
+    float b = 2.0;
+}

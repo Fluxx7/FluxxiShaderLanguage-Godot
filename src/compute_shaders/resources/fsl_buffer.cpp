@@ -19,6 +19,6 @@ void FSLBuffer::set_flags(uint64_t flags) {
 }
 
 void FSLBuffer::remove_flag(uint64_t flag) {
-    flag_long &= !flag;
+    flag_long &= ~flag;
     _rebuild();
 }

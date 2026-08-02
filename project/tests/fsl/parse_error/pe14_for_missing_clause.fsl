@@ -1,0 +1,9 @@
+//! EXPECT: parse_error
+// for statement with only two of the three required clauses.
+
+kernel[1, 1, 1] forMissingClause() {
+    float acc = 0.0;
+    for (uint i = 0u; i < 4u) {
+        acc += 1.0;
+    }
+}

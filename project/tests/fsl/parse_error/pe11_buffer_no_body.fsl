@@ -1,0 +1,8 @@
+//! EXPECT: parse_error
+// Buffer declaration with no field block.
+
+layout(std430) buffer noBody;
+
+kernel[1, 1, 1] after() {
+    float x = 1.0;
+}

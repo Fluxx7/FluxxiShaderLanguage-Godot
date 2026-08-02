@@ -1,7 +1,7 @@
 #include "fsl_file.h"
 #include "godot_cpp/classes/file_access.hpp"
 #include "console_string.h"
-
+using namespace AST;
 void print_operation(const Operation& op, ConsoleString& output);
 void print_expression(const Expression& expression, ConsoleString &output);
 void print_resource_node(ResourceNode& resource_node, ConsoleString &output);
@@ -141,9 +141,6 @@ void FSLFile::print_AST() {
             },
             [&](ResourceNode &resource)  {
                 print_resource_node(resource, output);
-            },
-            [&](FunctionDecl &func) {
-                
             }
         }, decl.value);
     }
@@ -310,11 +307,16 @@ void print_expression(const Expression &expression, ConsoleString &output) {
                 output.add_line("},");
                 return;
             }
-            output.add_line("Body {");
-            output.indent();
-            print_scope_node(else_node.body, output);
-            output.unindent();
-            output.add_line("},");
+            if (else_node.is_scoped) {
+                output.add_line("Body {");
+                output.indent();
+                print_scope_node(else_node.body, output);
+                output.unindent();
+                output.add_line("},");
+            } else {
+                output.add("Body: ");
+                print_expression(else_node.body.body[0], output);
+            }
             output.unindent();
             output.add_line("},");
         },
@@ -452,6 +454,24 @@ void print_variable_decl(VariableDecl& var_decl, ConsoleString &output) {
     print_type(var_decl.type, output);
     output.unindent();
     output.add_line("},");
+    if (!var_decl.annotations.is_empty()) {
+        output.add_line("Annotations {");
+        output.indent();
+        for (const auto& [name, args] : var_decl.annotations) {
+            output.add("Name: %s,", name);
+            if (!args.is_empty()) {
+                output.add_line(" Args: {");
+                output.indent();
+                for (const auto& arg : args) {
+                    print_operation(arg, output);
+                }
+                output.unindent();
+                output.add_line("},");
+            }
+        }
+        output.unindent();
+        output.add_line("},");
+    }
     output.unindent();
     output.add_line("},");
 }

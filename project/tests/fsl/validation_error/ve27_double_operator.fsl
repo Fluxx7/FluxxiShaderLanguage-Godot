@@ -1,0 +1,8 @@
+//! EXPECT: validation_error
+// Two consecutive binary operators. Operation lists are parsed without
+// ordering rules by design; the validator must reject the malformed
+// operator sequence.
+
+kernel[1, 1, 1] doubleOperator() {
+    float x = 1.0 + * 2.0;
+}

@@ -15,6 +15,7 @@ void FSLTexture2D::_rebuild() {
     rd_tex_format->set_height(height);
     rd_tex_format->set_texture_type(RenderingDevice::TextureType::TEXTURE_TYPE_2D);
     auto format = texture_info.format == RGBA16F ? RenderingDevice::DATA_FORMAT_R16G16B16A16_SFLOAT : RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT;
+    rd_tex_format->set_mipmaps(texture_info.mip_count);
     rd_tex_format->set_format(format);
     rd_tex_format->set_usage_bits(flag_long);
     if (data != nullptr) {

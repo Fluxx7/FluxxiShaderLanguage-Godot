@@ -1,0 +1,15 @@
+//! EXPECT: validation_error
+// A literal passed to an out parameter — out args must be writable lvalues.
+
+layout(std430) buffer sinkBuf {
+    float[] sink;
+};
+
+void produce(out float v) {
+    v = 1.0;
+}
+
+kernel[1, 1, 1] outParamLiteral() {
+    produce(3.0);
+    sink[0] = 0.0;
+}

@@ -6,6 +6,7 @@ Token::TokenCategory get_category(Token::TokenType tok_type) {
         case Token::NEWLINE:
             return Token::CATEGORY_WHITESPACE;
 
+        case Token::SYMBOL_COLON:
         case Token::SYMBOL_TILDE:
         case Token::SYMBOL_EXCLAMATION:
         case Token::SYMBOL_QUESTION:
@@ -22,18 +23,17 @@ Token::TokenCategory get_category(Token::TokenType tok_type) {
         case Token::SYMBOL_GREATERTHAN:
             return Token::CATEGORY_SYMBOL_OP;
 
-        case Token::SYMBOL_COLON:
         case Token::SYMBOL_COMMA:
         case Token::SYMBOL_PERIOD:
         case Token::SYMBOL_SINGLEQUOTE:
         case Token::SYMBOL_DOUBLEQUOTE:
         case Token::SYMBOL_SEMICOLON:
-        case Token::SYMBOL_LEFTBRACE:
-        case Token::SYMBOL_RIGHTBRACE:
-        case Token::SYMBOL_LEFTBRACKET:
-        case Token::SYMBOL_RIGHTBRACKET:
-        case Token::SYMBOL_LEFTPAREN:
-        case Token::SYMBOL_RIGHTPAREN:
+        case Token::BRACE_OPEN:
+        case Token::BRACE_CLOSE:
+        case Token::BRACKET_OPEN:
+        case Token::BRACKET_CLOSE:
+        case Token::PAREN_OPEN:
+        case Token::PAREN_CLOSE:
         case Token::SYMBOL_BACKSLASH:
         case Token::SYMBOL_POUND:
             return Token::CATEGORY_SYMBOL_OTHER;
@@ -60,7 +60,7 @@ Token::TokenCategory get_category(Token::TokenType tok_type) {
 
         case Token::TYPE_IMAGE2D:
         case Token::TYPE_IMAGE2DARRAY:
-            return Token::CATEGORY_COMPLEX_TYPE;
+            return Token::CATEGORY_OPAQUE_TYPE;
 
         case Token::TEXFORMAT_RGBA16F:
         case Token::TEXFORMAT_RGBA32F:
@@ -77,7 +77,8 @@ Token::TokenCategory get_category(Token::TokenType tok_type) {
 
         case Token::INTEGER:
         case Token::NUMBER:
-            return Token::CATEGORY_NUMBER;
+        case Token::LITERAL:
+            return Token::CATEGORY_LITERAL;
 
         case Token::ERR_EOS:
         case Token::ERR_TOKEN: 
@@ -95,12 +96,12 @@ Token::TokenType to_symbol(char c) {
         case '&': return Token::SYMBOL_AND;
         case '*': return Token::SYMBOL_STAR;
 
-        case '(': return Token::SYMBOL_LEFTPAREN;
-        case ')': return Token::SYMBOL_RIGHTPAREN;
-        case '{': return Token::SYMBOL_LEFTBRACE;
-        case '}': return Token::SYMBOL_RIGHTBRACE;
-        case '[': return Token::SYMBOL_LEFTBRACKET;
-        case ']': return Token::SYMBOL_RIGHTBRACKET;
+        case '(': return Token::PAREN_OPEN;
+        case ')': return Token::PAREN_CLOSE;
+        case '{': return Token::BRACE_OPEN;
+        case '}': return Token::BRACE_CLOSE;
+        case '[': return Token::BRACKET_OPEN;
+        case ']': return Token::BRACKET_CLOSE;
 
         case '#': return Token::SYMBOL_POUND;
         case '%': return Token::SYMBOL_PERCENT;
@@ -268,16 +269,25 @@ Token::TokenType get_token_type(String token_string) {
     if (token_string.is_valid_float()) {
         return Token::NUMBER;
     }
-
-    return Token::IDENTIFIER;
+    
+    if (token_string.is_valid_ascii_identifier()) {
+        return Token::IDENTIFIER;
+    }
+    
+    return Token::LITERAL;
 }
 
 
 
-LocalVector<Token> FSLLexer::tokenize(String file_name, String lexee) {
+optional<LocalVector<Token>> FSLLexer::tokenize(String file_name, String lexee_base) {
     uint32_t char_index = 0;
     LocalVector<char> token_buffer = {};
     LocalVector<Token> tokens = {};
+    auto lexee_clean = clean(lexee_base);
+    if (!lexee_clean.has_value()) {
+        return {};
+    }
+    String lexee = *lexee_clean;
     Token next_tok;
     uint32_t linenum = 0;
     uint32_t start_column = 0;
@@ -285,7 +295,7 @@ LocalVector<Token> FSLLexer::tokenize(String file_name, String lexee) {
     int dump_token = 0;
     int push_tok = 0;
     bool next_has_leading_whitespace = false;
-    char curr_char = ' ';
+    char32_t curr_char = ' ';
     auto flush_and_append = [&](Token::TokenType tok_type) {
         dump_token = 1;
         next_tok = Token();
@@ -303,6 +313,7 @@ LocalVector<Token> FSLLexer::tokenize(String file_name, String lexee) {
             case '\t':
                 flush_and_append(Token::WHITESPACE);
                 break;
+            case '\r':
             case '\n':
                 flush_and_append(Token::NEWLINE);
                 break;
@@ -365,4 +376,74 @@ LocalVector<Token> FSLLexer::tokenize(String file_name, String lexee) {
         column++;
     }
     return tokens;
+}
+
+optional<String> FSLLexer::clean(const String &source) {
+    String cleaned = "";
+    uint32_t char_index = 0;
+    enum CleanState {
+        NORMAL,
+        MAYBE_COMMENT,
+        LINE_COMMENT,
+        BLOCK_COMMENT,
+        MAYBE_ENDBLOCK
+    };
+    CleanState state = NORMAL;
+    while (char_index < source.length()) {
+        const char32_t& curr_char = source[char_index];
+        switch (state) {
+            case NORMAL: {
+                switch (curr_char) {
+                    case '/': {
+                        state = MAYBE_COMMENT;
+                        break;
+                    }  
+                    default:
+                        cleaned += curr_char;
+                        break;
+                }
+            } break;
+            case MAYBE_COMMENT: {
+                switch (curr_char) {
+                    case '/': {
+                        state = LINE_COMMENT;
+                        break;
+                    }
+                    case '*': {
+                        state = BLOCK_COMMENT;
+                        break;
+                    }
+                    default:
+                        state = NORMAL;
+                        cleaned += '/';
+                        cleaned += curr_char;
+                }
+            } break;
+            case LINE_COMMENT: {
+                if (curr_char == '\n' || curr_char == '\r') {
+                    cleaned += curr_char;
+                    state = NORMAL;
+                }
+            } break;
+            case BLOCK_COMMENT: {
+                if (curr_char == '*') {
+                    state = MAYBE_ENDBLOCK;
+                    break;
+                }
+            } break;
+            case MAYBE_ENDBLOCK: {
+                if (curr_char == '/') {
+                    state = NORMAL;
+                    cleaned += ' ';
+                    break;
+                }
+            } break;
+        }
+        char_index++;
+    }
+    if (state == BLOCK_COMMENT || state == MAYBE_ENDBLOCK) {
+        print_error("Unclosed block comment, expected a \"*/\" before end of file");
+        return {};
+    }
+	return cleaned;
 }

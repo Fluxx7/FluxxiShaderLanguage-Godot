@@ -1,6 +1,9 @@
 {
   "namespace": "FluxxiShaderLang",
-  "engine_enums": ["RenderingDevice.UniformType"],
+  "engine_enums": [
+    "RenderingDevice.UniformType",
+    "RenderingDevice.TextureUsageBits"
+  ],
   "classes": {
     "FSLResource": {
       "base": "RefCounted",
@@ -15,11 +18,22 @@
     },
     "FSLBuffer": {
       "extends": "FSLResource",
-      "abstract": true
+      "abstract": true,
+      "methods": [
+        { "name": "add_flag", "args": [{ "name": "flag", "type": "ulong" }] },
+        { "name": "set_flags", "args": [{ "name": "flags", "type": "ulong" }] },
+        { "name": "remove_flag", "args": [{ "name": "flag", "type": "ulong" }] }
+      ]
     },
     "FSLTexture": {
       "extends": "FSLResource",
-      "abstract": true
+      "abstract": true,
+      "methods": [
+        { "name": "add_flag", "args": [{ "name": "flag", "type": "RenderingDevice.TextureUsageBits" }] },
+        { "name": "set_flags", "args": [{ "name": "flags", "type": "RenderingDevice.TextureUsageBits" }] },
+        { "name": "remove_flag", "args": [{ "name": "flag", "type": "RenderingDevice.TextureUsageBits" }] },
+        { "name": "set_mip_count", "args": [{ "name": "_mip_count", "type": "uint", "csharp": "mipCount" }] }
+      ]
     },
     "FSLRawResource": {
       "extends": "FSLResource",
@@ -82,7 +96,15 @@
           { "name": "tex_height", "type": "uint" },
           { "name": "tex_count", "type": "uint" },
           { "name": "images", "type": "Godot.Collections.Array<Image>", "default": "null" }
+        ] },
+        { "name": "get_mip_view", "return": "FSLTextureView", "args": [
+          { "name": "mip_level", "type": "uint" }
         ] }
+      ]
+    },
+    "FSLTextureView": {
+      "extends": "FSLTexture",
+      "methods": [
       ]
     },
     "ComputeKernel": {
@@ -163,6 +185,13 @@
         { "name": "add_plan", "args": [
           { "name": "subplan", "type": "ComputePlan" },
           { "name": "is_temp", "type": "bool", "default": "false" }
+        ] },{ "name": "add_kernel_workgroups", "return": "ComputePlan", "args": [
+          { "name": "kernel", "type": "ComputeKernel" },
+          { "name": "x_workgroups", "type": "uint" },
+          { "name": "y_workgroups", "type": "uint" },
+          { "name": "z_workgroups", "type": "uint" },
+          { "name": "push_constants", "type": "Godot.Collections.Dictionary<StringName, Variant>", "default": "null" },
+          { "name": "is_temp", "type": "bool", "default": "false" }
         ] },
         { "name": "dispatch" }
       ]
@@ -170,7 +199,7 @@
     "FSLFile": {
       "base": "RefCounted",
       "methods": [
-        { "name": "test" },
+        { "name": "print_AST" },
         { "name": "from_file", "static": true, "return": "FSLFile", "args": [
           { "name": "file_path", "type": "string" }
         ] },

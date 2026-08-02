@@ -1,0 +1,7 @@
+//! EXPECT: parse_error
+// Characters that are not part of the language at all.
+
+kernel[1, 1, 1] illegalChars() {
+    float a = 3.0;
+    a = a @ 2.0 $ 1.0;
+}

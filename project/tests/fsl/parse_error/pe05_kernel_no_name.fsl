@@ -1,0 +1,6 @@
+//! EXPECT: parse_error
+// Kernel declaration with dims and args but no name.
+
+kernel[8, 8, 1] (id : GlobalInvocationID) {
+    float x = 1.0;
+}

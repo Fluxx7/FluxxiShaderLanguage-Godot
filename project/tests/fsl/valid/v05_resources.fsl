@@ -1,0 +1,41 @@
+//! EXPECT: valid
+//! KERNELS: resKernelA resKernelB
+//
+// Resource declaration stress test: all four buffer layouts (std140, std430,
+// vertex, index), named and anonymous blocks, both image types and formats,
+// a bare uniform variable, and kernels touching disjoint resource subsets
+// (exercises the used-resource filtering: resKernelA must only bind dataBlock
+// and globalScale).
+
+layout(std140) buffer paramBlock {
+    float4 tint;
+    uint count;
+} params;
+
+layout(std430) buffer dataBlock {
+    float[] data;
+};
+
+layout(vertex) buffer meshVerts {
+    float3 position;
+    float2 uv;
+};
+
+layout(index) buffer meshIndices {
+    uint index;
+};
+
+layout(rgba32f) uniform image2D outImage;
+layout(rgba16f) uniform image2DArray layerImage;
+
+uniform float globalScale;
+
+kernel[64, 1, 1] resKernelA(id : GlobalInvocationID) {
+    data[id.x] = float(id.x) * globalScale;
+}
+
+kernel[8, 8, 1] resKernelB(id : GlobalInvocationID) {
+    if (id.x >= params.count) return;
+    float4 px = imageLoad(layerImage, int3(int(id.x), int(id.y), 0)) * params.tint;
+    imageStore(outImage, int2(id.xy), px);
+}

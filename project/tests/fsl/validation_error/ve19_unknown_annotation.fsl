@@ -1,0 +1,13 @@
+//! EXPECT: validation_error
+// Annotation name that does not exist. Grammar allows any identifier after
+// the colon; the validator must reject unknown annotation names.
+
+const uint x : totally_made_up_annotation = 1;
+
+layout(std430) buffer sinkBuf {
+    float[] sink;
+};
+
+kernel[1, 1, 1] unknownAnnotation() {
+    sink[0] = float(x);
+}

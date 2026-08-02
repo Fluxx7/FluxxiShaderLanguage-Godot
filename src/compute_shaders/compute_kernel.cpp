@@ -76,10 +76,16 @@ void ComputeKernel::_init_resources() {
     }
 }
 
-uint32_t get_min_workgroup_count(uint32_t local_invocations, uint32_t requested_invocations) {
+uint32_t ComputeKernel::get_min_workgroup_count(sumtype<uint32_t, StringName> local_invocation_var, uint32_t requested_invocations) {
+    uint32_t local_invocations = 1;
+    match(local_invocation_var, 
+        [&](uint32_t literal) { local_invocations = literal; },
+        [&](StringName spec_const) { local_invocations = kernel_info.specialization_constants[spec_const].value; });
     uint32_t def_workgroups = requested_invocations / local_invocations;
     uint32_t remaining_invocations = requested_invocations % local_invocations;
-    return remaining_invocations > 0 ? def_workgroups + 1 : def_workgroups;
+    uint32_t num_workgroups = remaining_invocations > 0 ? def_workgroups + 1 : def_workgroups;
+    ERR_FAIL_COND_V_MSG(num_workgroups == 0, 1, "Workgroup size must be greater than 0");
+    return num_workgroups;
 }
 
 std::tuple<uint32_t, uint32_t, uint32_t> ComputeKernel::get_workgroups(uint32_t x_invocations, uint32_t y_invocations, uint32_t z_invocations) {
@@ -146,8 +152,7 @@ bool ComputeKernel::try_assign_resource(Ref<FSLResource> resource, StringName re
 
 void print_resource_info(const StringName& res_name, const ResourceInfo &res_info) {
     printvf("\t%s: set = %d, binding = %d", res_name, res_info.set, res_info.binding);
-    std::visit(overload{
-        [&](const BufferInfo &buf_info)          {
+    match(res_info.type_info, [&](const BufferInfo &buf_info)          {
             printvf("\t\t%s", get_buffer_desc(buf_info.type, buf_info.format));
             print_line("\t\tBuffer fields:");
             for (const auto& [name, value] : buf_info.fields) {
@@ -159,12 +164,17 @@ void print_resource_info(const StringName& res_name, const ResourceInfo &res_inf
         },
         [&](const VariableInfo &var_info)  {
             print_line("\t\tHow the fuck");
-        }
-    }, res_info.type_info);
+        });
 }
 
 void ComputeKernel::print_info() {
-    printvf("Local Invocations: %dx, %dy, %dz", kernel_info.local_invocations[0], kernel_info.local_invocations[1], kernel_info.local_invocations[2]);
+    uint32_t local_invocations[3];
+    for (uint32_t i = 0; i < 3; i++) {
+        match(kernel_info.local_invocations[i],
+            [&](uint32_t val) { local_invocations[i] = val; },
+            [&](StringName spec_const) { local_invocations[i] = kernel_info.specialization_constants[spec_const].value; });
+    }
+    printvf("Local Invocations: %dx, %dy, %dz", local_invocations[0], local_invocations[1], local_invocations[2]);
     printvf("Push Constants: ");
     for (const auto& [name, value] : kernel_info.push_constants) {
         printvf("\t%s: %s", name, fslType_to_string(value.type));

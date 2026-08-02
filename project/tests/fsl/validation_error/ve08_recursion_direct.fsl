@@ -1,0 +1,15 @@
+//! EXPECT: validation_error
+// Direct recursion — forbidden (GLSL/SPIR-V compute has no recursion).
+
+layout(std430) buffer sinkBuf {
+    float[] sink;
+};
+
+float fact(float n) {
+    if (n <= 1.0) return 1.0;
+    return n * fact(n - 1.0);
+}
+
+kernel[1, 1, 1] directRecursion() {
+    sink[0] = fact(5.0);
+}

@@ -1,0 +1,13 @@
+// Second-level include: pulls in math_common.fsl itself, creating a diamond
+// when the top-level file includes both this and math_common.fsl directly.
+#ifdef LEVEL2_INCLUDED
+#else
+#define LEVEL2_INCLUDED
+
+#include "math_common.fsl"
+
+float quad(float x) {
+    return sqr(sqr(x));
+}
+
+#endif

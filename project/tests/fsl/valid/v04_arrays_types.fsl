@@ -1,0 +1,44 @@
+//! EXPECT: valid
+//! KERNELS: arrayTorture
+//
+// Type-prefix array stress test (design decision: float2[4] x, not
+// float2 x[4]): macro-sized dims, comptime-expression dims, multi-dim
+// arrays, unsized trailing buffer member, shared arrays, array params,
+// const global array with constructor initializer, chained indexing.
+
+#define N 16
+
+layout(std430) buffer arrayBuf {
+    float4[N] header;
+    float2[N / 2][2] pairs;
+    float[] tail;
+};
+
+shared float[N][N] tile_cache;
+shared uint[N * N / 4] packed_cache;
+
+const float2[4] offsets = float2[4](
+    float2(-1.0, 0.0), float2(1.0, 0.0),
+    float2(0.0, -1.0), float2(0.0, 1.0)
+);
+
+float sum4(const float[4] xs) {
+    float s = 0.0;
+    for (int i = 0; i < 4; i++) s += xs[i];
+    return s;
+}
+
+kernel[N, N, 1] arrayTorture(g : GlobalInvocationID, l : LocalInvocationID) {
+    // local fixed-size array, filled then passed as an argument
+    float[4] local_arr;
+    for (int i = 0; i < 4; i++) local_arr[i] = float(i) + offsets[i].x;
+
+    tile_cache[l.y][l.x] = sum4(local_arr);
+    packed_cache[(l.y * uint(N) + l.x) / 4u] = l.x;
+    barrier();
+
+    // nested / chained indexing and swizzles on indexed elements
+    float v = tile_cache[uint(local_arr[2])][l.x] + pairs[l.x % uint(N / 2)][1].y;
+    header[l.x % uint(N)].xy += offsets[int(v) & 3];
+    tail[g.x + g.y * uint(N)] = v;
+}

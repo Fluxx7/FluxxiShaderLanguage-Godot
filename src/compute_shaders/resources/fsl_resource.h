@@ -1,12 +1,10 @@
 #pragma once
-#include "godot_cpp/variant/string.hpp"
+#include "godot_imports.h"
+#include "std_imports.h"
+
 #include "godot_cpp/classes/rendering_device.hpp"
 #include "godot_cpp/classes/rendering_server.hpp"
 #include "godot_cpp/variant/rid.hpp"
-#include "godot_cpp/templates/local_vector.hpp"
-#include "godot_cpp/classes/file_access.hpp"
-#include "godot_cpp/templates/hash_map.hpp"
-#include "godot_cpp/templates/a_hash_map.hpp"
 #include "godot_cpp/classes/rd_uniform.hpp"
 #include "godot_cpp/classes/rd_texture_format.hpp"
 #include "godot_cpp/classes/rd_texture_view.hpp"
@@ -16,7 +14,6 @@
 #include "godot_cpp/variant/typed_dictionary.hpp"
 
 #include "ast_defs.h"
-#include <optional>
 
 struct VariableInfo {
     FSLType type;
@@ -24,6 +21,7 @@ struct VariableInfo {
 struct TextureInfo {
     TextureFormat format;
     TextureType type;
+    uint32_t mip_count;
 };
 
 struct BufferFieldInfo {
@@ -47,7 +45,7 @@ struct ResourceInfo {
     uint32_t set;
     uint32_t binding;
     ResourceType resource_type;
-    std::variant<BufferInfo, TextureInfo, VariableInfo> type_info;
+    sumtype<BufferInfo, TextureInfo, VariableInfo> type_info;
 };
 
 class FSLResource : public RefCounted {
@@ -96,6 +94,8 @@ public:
     void add_flag(uint64_t flag);
     void set_flags(uint64_t flags);
     void remove_flag(uint64_t flag);
+    void set_mip_count(uint32_t _mip_count);
+    uint32_t get_mip_count() { return texture_info.mip_count; }
 };
 
 /**

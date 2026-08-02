@@ -1,0 +1,13 @@
+//! EXPECT: validation_error
+// Buffer member array dims must be compile-time constant; a specialization
+// constant is only pipeline-constant, so this must be rejected.
+
+const uint n : specialization_constant = 8;
+
+layout(std430) buffer specSized {
+    float[n] xs;
+};
+
+kernel[1, 1, 1] bufferDimNotComptime() {
+    xs[0] = 1.0;
+}

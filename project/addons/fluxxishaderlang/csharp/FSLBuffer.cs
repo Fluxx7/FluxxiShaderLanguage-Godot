@@ -12,4 +12,17 @@ public partial class FSLBuffer : FSLResource
     public new static readonly StringName GDClassName = "FSLBuffer";
 
     public FSLBuffer(GodotObject inner) : base(inner) { }
+
+    public void AddFlag(ulong flag) => Inner.Call(MethodName.AddFlag, flag);
+
+    public void SetFlags(ulong flags) => Inner.Call(MethodName.SetFlags, flags);
+
+    public void RemoveFlag(ulong flag) => Inner.Call(MethodName.RemoveFlag, flag);
+
+    public new static class MethodName
+    {
+        public static readonly StringName AddFlag = "add_flag";
+        public static readonly StringName SetFlags = "set_flags";
+        public static readonly StringName RemoveFlag = "remove_flag";
+    }
 }

@@ -1,0 +1,6 @@
+//! EXPECT: parse_error
+// #ifdef with no matching #endif before end of file.
+
+#define SOMETHING
+#ifdef SOMETHING
+const float x = 1.0;

@@ -1,0 +1,14 @@
+//! EXPECT: validation_error
+// Function declared to return float but returns float2.
+
+layout(std430) buffer sinkBuf {
+    float[] sink;
+};
+
+float wrongReturn(float x) {
+    return float2(x, x);
+}
+
+kernel[1, 1, 1] returnMismatch() {
+    sink[0] = wrongReturn(1.0);
+}

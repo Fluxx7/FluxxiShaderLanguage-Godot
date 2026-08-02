@@ -36,6 +36,7 @@ void initialize_gdextension_types(ModuleInitializationLevel p_level)
 
 	GDREGISTER_CLASS(FSLTexture2D);
 	GDREGISTER_CLASS(FSLTexture2DArray);
+	GDREGISTER_CLASS(FSLTextureView);
 
 	GDREGISTER_CLASS(FSLRawResource);
 }

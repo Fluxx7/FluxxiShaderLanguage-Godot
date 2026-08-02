@@ -1,17 +1,8 @@
 #pragma once
-
-#include "godot_cpp/variant/string.hpp"
-#include "godot_cpp/templates/local_vector.hpp"
-#include "godot_cpp/classes/file_access.hpp"
-#include "godot_cpp/templates/hash_map.hpp"
+#include "godot_imports.h"
+#include "std_imports.h"
 
 #include "ast_defs.h"
-#include <optional>
-#include <stack>
-
-
-
-using namespace godot;
 
 
 /**
@@ -20,7 +11,9 @@ using namespace godot;
 
 class FSLLexer {
 protected:
+    
 public:
     FSLLexer() = default;
-    LocalVector<Token> tokenize(String file_name, String lexee);
+    optional<LocalVector<Token>> tokenize(String file_name, String lexee);
+    optional<String> clean(const String& source);
 };
