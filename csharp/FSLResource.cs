@@ -32,6 +32,7 @@ public partial class FSLResource
         "FSLIndexBuffer" => new FSLIndexBuffer(inner),
         "FSLTexture2D" => new FSLTexture2D(inner),
         "FSLTexture2DArray" => new FSLTexture2DArray(inner),
+        "FSLTextureView" => new FSLTextureView(inner),
         _ => new FSLResource(inner),
     };
 

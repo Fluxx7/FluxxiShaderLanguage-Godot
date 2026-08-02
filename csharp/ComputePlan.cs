@@ -34,6 +34,8 @@ public partial class ComputePlan
 
     public void AddPlan(ComputePlan subplan, bool isTemp = false) => Inner.Call(MethodName.AddPlan, subplan?.Inner, isTemp);
 
+    public ComputePlan AddKernelWorkgroups(ComputeKernel kernel, uint xWorkgroups, uint yWorkgroups, uint zWorkgroups, Godot.Collections.Dictionary<StringName, Variant> pushConstants = null, bool isTemp = false) => ComputePlan.Wrap(Inner.Call(MethodName.AddKernelWorkgroups, kernel?.Inner, xWorkgroups, yWorkgroups, zWorkgroups, pushConstants ?? new Godot.Collections.Dictionary<StringName, Variant>(), isTemp).AsGodotObject());
+
     public void Dispatch() => Inner.Call(MethodName.Dispatch);
 
     public static class MethodName
@@ -42,6 +44,7 @@ public partial class ComputePlan
         public static readonly StringName AddBarrier = "add_barrier";
         public static readonly StringName AddKernel = "add_kernel";
         public static readonly StringName AddPlan = "add_plan";
+        public static readonly StringName AddKernelWorkgroups = "add_kernel_workgroups";
         public static readonly StringName Dispatch = "dispatch";
     }
 }

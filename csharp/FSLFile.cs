@@ -26,7 +26,7 @@ public partial class FSLFile
     /// <summary>Wraps a GDExtension object in the most-derived C# wrapper for its Godot class.</summary>
     public static FSLFile Wrap(GodotObject inner) => inner == null ? null : new FSLFile(inner);
 
-    public void Test() => Inner.Call(MethodName.Test);
+    public void PrintAST() => Inner.Call(MethodName.PrintAST);
 
     public static FSLFile FromFile(string filePath) => FSLFile.Wrap(ClassDB.ClassCallStatic(GDClassName, MethodName.FromFile, filePath).AsGodotObject());
 
@@ -38,7 +38,7 @@ public partial class FSLFile
 
     public static class MethodName
     {
-        public static readonly StringName Test = "test";
+        public static readonly StringName PrintAST = "print_AST";
         public static readonly StringName FromFile = "from_file";
         public static readonly StringName GetKernelSource = "get_kernel_source";
         public static readonly StringName GetKernel = "get_kernel";

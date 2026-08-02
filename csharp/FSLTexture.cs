@@ -12,4 +12,20 @@ public partial class FSLTexture : FSLResource
     public new static readonly StringName GDClassName = "FSLTexture";
 
     public FSLTexture(GodotObject inner) : base(inner) { }
+
+    public void AddFlag(RenderingDevice.TextureUsageBits flag) => Inner.Call(MethodName.AddFlag, (long)flag);
+
+    public void SetFlags(RenderingDevice.TextureUsageBits flags) => Inner.Call(MethodName.SetFlags, (long)flags);
+
+    public void RemoveFlag(RenderingDevice.TextureUsageBits flag) => Inner.Call(MethodName.RemoveFlag, (long)flag);
+
+    public void SetMipCount(uint mipCount) => Inner.Call(MethodName.SetMipCount, mipCount);
+
+    public new static class MethodName
+    {
+        public static readonly StringName AddFlag = "add_flag";
+        public static readonly StringName SetFlags = "set_flags";
+        public static readonly StringName RemoveFlag = "remove_flag";
+        public static readonly StringName SetMipCount = "set_mip_count";
+    }
 }
