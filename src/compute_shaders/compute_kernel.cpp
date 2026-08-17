@@ -14,7 +14,11 @@ void ComputeKernel::_bind_methods() {
     ClassDB::bind_method(D_METHOD("print_info"), &ComputeKernel::print_info);
 
     ClassDB::bind_method(D_METHOD("dispatch", "x_invocations", "y_invocations", "z_invocations", "push_constants"), &ComputeKernel::dispatch, DEFVAL((TypedDictionary<uint32_t, uint32_t>())));
+    ClassDB::bind_method(D_METHOD("dispatch_indirect", "command_buffer", "offset", "push_constants"), &ComputeKernel::dispatch_indirect, DEFVAL((TypedDictionary<uint32_t, uint32_t>())));
     ClassDB::bind_method(D_METHOD("dispatch_workgroups", "x_workgroups", "y_workgroups", "z_workgroups", "push_constants"), &ComputeKernel::dispatch_workgroups, DEFVAL((TypedDictionary<uint32_t, uint32_t>())));
+
+    ClassDB::bind_method(D_METHOD("get_specialization_constant_value", "spec_constant"), &ComputeKernel::get_specialization_constant_value);
+    ClassDB::bind_method(D_METHOD("set_specialization_constant", "spec_constant", "value"), &ComputeKernel::set_specialization_constant);
     
     ClassDB::bind_method(D_METHOD("assign_resource", "resource", "resource_name"), &ComputeKernel::assign_resource);
 
@@ -49,9 +53,6 @@ Ref<ComputeKernel> ComputeKernel::make_new(String source, KernelInfo info, Rende
 
 
 void ComputeKernel::_generate_pipeline() {
-    if (shader_comp.is_valid() && pipeline.is_valid() && kernel_rd->compute_pipeline_is_valid(pipeline)) {
-        return;
-    }
     if (shader_comp.is_valid()) {
         kernel_rd->free_rid(shader_comp);
         if (pipeline.is_valid() && kernel_rd->compute_pipeline_is_valid(pipeline)) {
@@ -65,9 +66,17 @@ void ComputeKernel::_generate_pipeline() {
 
     if (shader_spirv->get_stage_compile_error(RenderingDevice::ShaderStage::SHADER_STAGE_COMPUTE) != "") {
         print_error(vformat("%s\nIn: %s", shader_spirv->get_stage_compile_error(RenderingDevice::ShaderStage::SHADER_STAGE_COMPUTE), source));
+        ERR_FAIL_MSG("Errors in shader compilation, pipeline creation aborted");
     }
     shader_comp = kernel_rd->shader_create_from_spirv(shader_spirv);
-    pipeline = kernel_rd->compute_pipeline_create(shader_comp);
+    godot::TypedArray<Ref<godot::RDPipelineSpecializationConstant>> spec_constants;
+    for (const auto& [spec_constant_name, spec_constant_info] : kernel_info.specialization_constants) {
+        Ref<godot::RDPipelineSpecializationConstant> spec_constant = memnew(godot::RDPipelineSpecializationConstant);
+        spec_constant->set_constant_id(spec_constant_info.constant_id);
+        spec_constant->set_value(spec_constant_info.value);
+        spec_constants.append(spec_constant);
+    }
+    pipeline = kernel_rd->compute_pipeline_create(shader_comp, spec_constants);
 }
 
 void ComputeKernel::_init_resources() {
@@ -88,6 +97,14 @@ uint32_t ComputeKernel::get_min_workgroup_count(sumtype<uint32_t, StringName> lo
     return num_workgroups;
 }
 
+ComputeKernel::ComputeKernel() {
+    kernel_rd = RenderingServer::get_singleton()->get_rendering_device();
+    if (kernel_rd == nullptr) {
+        kernel_rd = RenderingServer::get_singleton()->create_local_rendering_device();
+        ERR_FAIL_NULL(kernel_rd);
+    }
+}
+
 std::tuple<uint32_t, uint32_t, uint32_t> ComputeKernel::get_workgroups(uint32_t x_invocations, uint32_t y_invocations, uint32_t z_invocations) {
 	return std::make_tuple(
         get_min_workgroup_count(kernel_info.local_invocations[0], x_invocations), 
@@ -98,7 +115,12 @@ std::tuple<uint32_t, uint32_t, uint32_t> ComputeKernel::get_workgroups(uint32_t 
 
 
 RID ComputeKernel::get_pipeline_rid() {
-    _generate_pipeline();
+    if (!(shader_comp.is_valid() && pipeline.is_valid() && kernel_rd->compute_pipeline_is_valid(pipeline))) {
+        _generate_pipeline();
+    }
+    if (!kernel_rd->compute_pipeline_is_valid(pipeline)) {
+        ERR_FAIL_V_MSG(RID(), "Pipeline failed to create properly, aborting dispatch.");
+    }
 	return pipeline;
 }
 
@@ -110,11 +132,10 @@ PackedByteArray ComputeKernel::push_constants_to_bytes(TypedDictionary<StringNam
     if (kernel_info.push_constants.size() > 0) {
         PackedByteArray shader_pc_bytes = {};
         for (const auto& [pc_name, pc_info] : kernel_info.push_constants) {
-            uint32_t pc_size_bytes = get_fsl_type_size(pc_info.type);
+            // TODO: Sizing?
             PackedByteArray pc_byte_array;
             if (push_constants.has(pc_name)) {
                 pc_byte_array = fsl_type_to_bytes(pc_info.type, push_constants[pc_name]);
-                // printvf("input value %s, output %02x%02x%02x%02x", push_constants[pc_name].stringify(), pc_byte_array[3], pc_byte_array[2], pc_byte_array[1], pc_byte_array[0]);
             } else {
                 Variant defval = get_fsl_default_value(pc_info.type);
                 WARN_PRINT(vformat("No push constant assigned for \"%s\", using default value of %s", pc_name, defval));
@@ -186,6 +207,28 @@ void ComputeKernel::print_info() {
     printvf("Code:\n%s", source);
 }
 
+/********* SPECIALIZATION CONSTANTS *********/
+
+Variant ComputeKernel::get_specialization_constant_value(StringName spec_constant) {
+    ERR_FAIL_COND_V_MSG(!kernel_info.specialization_constants.has(spec_constant), Variant(), vformat("Kernel \"%s\" has no specialization constant named \"%s\"", kernel_info.kernel_name, spec_constant));
+	return kernel_info.specialization_constants[spec_constant].value;
+}
+
+void ComputeKernel::set_specialization_constant(StringName spec_constant, Variant value) {
+    ERR_FAIL_COND_MSG(!kernel_info.specialization_constants.has(spec_constant), vformat("Kernel \"%s\" has no specialization constant named \"%s\"", kernel_info.kernel_name, spec_constant));
+    kernel_info.specialization_constants[spec_constant].value = value;
+    _generate_pipeline();
+}
+
+bool ComputeKernel::try_set_specialization_constant(StringName spec_constant, Variant value) {
+    if (!kernel_info.specialization_constants.has(spec_constant)) {
+        return false;
+    }
+    kernel_info.specialization_constants[spec_constant].value = value;
+    _generate_pipeline();
+    return true;
+}
+
 /********* RESOURCE API *********/
 
 void ComputeKernel::assign_resource(Ref<FSLResource> resource, StringName resource_name) {
@@ -198,6 +241,7 @@ void ComputeKernel::assign_resource(Ref<FSLResource> resource, StringName resour
 }
 
 // -- BUFFERS --
+
 
 Ref<FSLStorageBuffer> ComputeKernel::get_storage_buffer(const StringName &buffer_name) {
 	return _get_resource_typed<FSLStorageBuffer>(buffer_name);
@@ -236,9 +280,14 @@ Ref<FSLResource> ComputeKernel::get_resource(const StringName &res_name) {
 /********* KERNEL API *********/
 
 void ComputeKernel::dispatch(uint32_t x_invocations, uint32_t y_invocations, uint32_t z_invocations, TypedDictionary<StringName, Variant> push_constants) {
-    _generate_pipeline();
+    if (!(shader_comp.is_valid() && pipeline.is_valid() && kernel_rd->compute_pipeline_is_valid(pipeline))) {
+        _generate_pipeline();
+    }
+    if (!kernel_rd->compute_pipeline_is_valid(pipeline)) {
+        ERR_FAIL_MSG("Pipeline failed to create properly, aborting dispatch.");
+    }
     RID uniform_set_rid = uniform_set.get_rid(shader_comp);
-
+    
     int64_t computeList = kernel_rd->compute_list_begin();
     kernel_rd->compute_list_bind_compute_pipeline(computeList, pipeline);
     
@@ -248,13 +297,17 @@ void ComputeKernel::dispatch(uint32_t x_invocations, uint32_t y_invocations, uin
     }
 
     auto workgroups = get_workgroups(x_invocations, y_invocations, z_invocations);
-    kernel_rd->compute_list_bind_uniform_set(computeList, uniform_set_rid, 0);
+    if (kernel_rd->uniform_set_is_valid(uniform_set_rid)) {
+        kernel_rd->compute_list_bind_uniform_set(computeList, uniform_set_rid, 0);
+    }
     kernel_rd->compute_list_dispatch(computeList, std::get<0>(workgroups), std::get<1>(workgroups), std::get<2>(workgroups));
     kernel_rd->compute_list_end();
 }
 
-void ComputeKernel::dispatch_workgroups(uint32_t x_workgroups, uint32_t y_workgroups, uint32_t z_workgroups, TypedDictionary<StringName, Variant> push_constants) {
-    _generate_pipeline();
+void ComputeKernel::dispatch_indirect(Ref<FSLBuffer> command_buffer, uint32_t offset, TypedDictionary<StringName, Variant> push_constants) {
+    if (!(shader_comp.is_valid() && pipeline.is_valid() && kernel_rd->compute_pipeline_is_valid(pipeline))) {
+        _generate_pipeline();
+    }
     RID uniform_set_rid = uniform_set.get_rid(shader_comp);
 
     int64_t computeList = kernel_rd->compute_list_begin();
@@ -265,7 +318,30 @@ void ComputeKernel::dispatch_workgroups(uint32_t x_workgroups, uint32_t y_workgr
         kernel_rd->compute_list_set_push_constant(computeList, shader_pc_bytes, shader_pc_bytes.size());
     }
 
-    kernel_rd->compute_list_bind_uniform_set(computeList, uniform_set_rid, 0);
+    if (kernel_rd->uniform_set_is_valid(uniform_set_rid)) {
+        kernel_rd->compute_list_bind_uniform_set(computeList, uniform_set_rid, 0);
+    }
+    kernel_rd->compute_list_dispatch_indirect(computeList, command_buffer->get_rid(), offset);
+    kernel_rd->compute_list_end();
+}
+
+void ComputeKernel::dispatch_workgroups(uint32_t x_workgroups, uint32_t y_workgroups, uint32_t z_workgroups, TypedDictionary<StringName, Variant> push_constants) {
+    if (!(shader_comp.is_valid() && pipeline.is_valid() && kernel_rd->compute_pipeline_is_valid(pipeline))) {
+        _generate_pipeline();
+    }
+    RID uniform_set_rid = uniform_set.get_rid(shader_comp);
+
+    int64_t computeList = kernel_rd->compute_list_begin();
+    kernel_rd->compute_list_bind_compute_pipeline(computeList, pipeline);
+    
+    if (kernel_info.push_constants.size() > 0) {
+        PackedByteArray shader_pc_bytes = push_constants_to_bytes(push_constants);
+        kernel_rd->compute_list_set_push_constant(computeList, shader_pc_bytes, shader_pc_bytes.size());
+    }
+
+    if (kernel_rd->uniform_set_is_valid(uniform_set_rid)) {
+        kernel_rd->compute_list_bind_uniform_set(computeList, uniform_set_rid, 0);
+    }
     kernel_rd->compute_list_dispatch(computeList, x_workgroups, y_workgroups, z_workgroups);
     kernel_rd->compute_list_end();
 }

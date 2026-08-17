@@ -2,10 +2,10 @@
 // Non-void function with a control path that falls off the end.
 
 layout(std430) buffer sinkBuf {
-    float[] sink;
+    f32[] sink;
 };
 
-float sometimesReturns(float x) {
+f32 sometimesReturns(f32 x) {
     if (x > 0.0) return 1.0;
 }
 

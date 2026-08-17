@@ -4,5 +4,5 @@
 layout(std430) buffer noBody;
 
 kernel[1, 1, 1] after() {
-    float x = 1.0;
+    f32 x = 1.0;
 }

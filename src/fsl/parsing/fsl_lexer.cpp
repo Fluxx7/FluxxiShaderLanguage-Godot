@@ -50,12 +50,16 @@ Token::TokenCategory get_category(Token::TokenType tok_type) {
         case Token::KEYWORD_ELSE:
         case Token::KEYWORD_FOR:
         case Token::KEYWORD_RETURN:
+        case Token::KEYWORD_DO:
+        case Token::KEYWORD_SWITCH:
             return Token::CATEGORY_STATEMENT_KEYWORD;
 
         case Token::KEYWORD_KERNEL:
         case Token::KEYWORD_LAYOUT:
         case Token::KEYWORD_UNIFORM:
         case Token::KEYWORD_BUFFER:
+        case Token::KEYWORD_STRUCT:
+        case Token::KEYWORD_VOID:
             return Token::CATEGORY_GLOBAL_KEYWORD;
 
         case Token::TYPE_IMAGE2D:
@@ -66,8 +70,6 @@ Token::TokenCategory get_category(Token::TokenType tok_type) {
         case Token::TEXFORMAT_RGBA32F:
             return Token::CATEGORY_TEXTUREFORMAT;
 
-        case Token::BUFFORMAT_INDEX:
-        case Token::BUFFORMAT_VERTEX:
         case Token::BUFFORMAT_STD140:
         case Token::BUFFORMAT_STD430:
             return Token::CATEGORY_BUFFERFORMAT;
@@ -171,19 +173,19 @@ Token::TokenType to_texture_format(String identifier) {
     return Token::ERR_TOKEN;
 }
 
-Token::TokenType get_complex_type(const String& identifier) {
-    static const char *complex_type_strs[] = {
+Token::TokenType get_opaque_type(const String& identifier) {
+    static const char *opaque_type_strs[] = {
         "image2D",
         "image2DArray"
     }; 
-    static const Token::TokenType complex_types[] = {
+    static const Token::TokenType opaque_types[] = {
         Token::TYPE_IMAGE2D,
         Token::TYPE_IMAGE2DARRAY
-    }; 
+    };
     uint32_t curr_index = 0;
-    for (auto complex_type : complex_type_strs) {
+    for (auto complex_type : opaque_type_strs) {
         if (identifier == complex_type) {
-            return complex_types[curr_index];
+            return opaque_types[curr_index];
         }
         curr_index++;
     }
@@ -193,15 +195,11 @@ Token::TokenType get_complex_type(const String& identifier) {
 Token::TokenType to_buffer_format(const String &identifier) {
     static const char *buffer_format_strs[] = {
         "std140",
-        "std430",
-        "vertex",
-        "index"
+        "std430"
     }; 
     static const Token::TokenType buffer_formats[] = {
         Token::BUFFORMAT_STD140,
-        Token::BUFFORMAT_STD430,
-        Token::BUFFORMAT_VERTEX,
-        Token::BUFFORMAT_INDEX
+        Token::BUFFORMAT_STD430
     }; 
     uint32_t curr_index = 0;
     for (auto buffer_format_str : buffer_format_strs) {
@@ -214,39 +212,31 @@ Token::TokenType to_buffer_format(const String &identifier) {
 }
 
 Token::TokenType get_token_type(String token_string) {
-    if (token_string == "kernel") {
-        return Token::KEYWORD_KERNEL;
+    static const HashMap<StringName, Token::TokenType> keyword_strs = {
+        {"kernel", Token::KEYWORD_KERNEL},
+        {"layout", Token::KEYWORD_LAYOUT},
+
+        {"for", Token::KEYWORD_FOR},
+        {"if", Token::KEYWORD_IF},
+        {"else", Token::KEYWORD_ELSE},
+        {"while", Token::KEYWORD_WHILE},
+        {"do", Token::KEYWORD_DO},
+        {"switch", Token::KEYWORD_SWITCH},
+
+        {"break", Token::KEYWORD_BREAK},
+        {"continue", Token::KEYWORD_CONTINUE},
+        {"uniform", Token::KEYWORD_UNIFORM},
+        {"buffer", Token::KEYWORD_BUFFER},
+        {"return", Token::KEYWORD_RETURN},
+        {"struct", Token::KEYWORD_STRUCT},
+        {"void", Token::KEYWORD_VOID}
+    };
+
+    if (keyword_strs.has(token_string)) {
+        return keyword_strs[token_string];
     }
 
-    if (token_string == "layout") {
-        return Token::KEYWORD_LAYOUT;
-    }
-
-    if (token_string == "for") {
-        return Token::KEYWORD_FOR;
-    }
-
-    if (token_string == "if") {
-        return Token::KEYWORD_IF;
-    }
-
-    if (token_string == "else") {
-        return Token::KEYWORD_ELSE;
-    }
-
-    if (token_string == "uniform") {
-        return Token::KEYWORD_UNIFORM;
-    }
-
-    if (token_string == "buffer") {
-        return Token::KEYWORD_BUFFER;
-    }
-
-    if (token_string == "return") {
-        return Token::KEYWORD_RETURN;
-    }
-
-    if (auto complex_type = get_complex_type(token_string); complex_type != Token::ERR_TOKEN) {
+    if (auto complex_type = get_opaque_type(token_string); complex_type != Token::ERR_TOKEN) {
         return complex_type;
     }
 
@@ -290,7 +280,6 @@ optional<LocalVector<Token>> FSLLexer::tokenize(String file_name, String lexee_b
     String lexee = *lexee_clean;
     Token next_tok;
     uint32_t linenum = 0;
-    uint32_t start_column = 0;
     uint32_t column = 0;
     int dump_token = 0;
     int push_tok = 0;
@@ -303,7 +292,27 @@ optional<LocalVector<Token>> FSLLexer::tokenize(String file_name, String lexee_b
         next_tok.category = get_category(tok_type);
         next_tok.contents = String() + curr_char;
         push_tok = 1;
-        start_column = column + 1;
+    };
+    auto dump_token_buffer = [&]() {
+        if (token_buffer.size() > 0) {
+            String token_string = "";
+            for (auto tokchar : token_buffer) {
+                token_string += tokchar;
+            }
+            token_buffer.clear();
+            Token new_tok;
+            new_tok.contents = token_string;
+            new_tok.has_leading_whitespace = next_has_leading_whitespace;
+            new_tok.debug_info.row = linenum;
+            new_tok.debug_info.column = column - token_string.length();
+            new_tok.debug_info.length = token_string.length();
+            new_tok.debug_info.source_file = file_name;
+            auto new_tok_type = get_token_type(token_string);
+            new_tok.token_type = new_tok_type;
+            new_tok.category = get_category(new_tok_type);
+            tokens.push_back(new_tok);
+            next_has_leading_whitespace = false;
+        }
     };
     while (char_index < lexee.length()) {
         curr_char = lexee[char_index++];
@@ -332,25 +341,7 @@ optional<LocalVector<Token>> FSLLexer::tokenize(String file_name, String lexee_b
         
 
         if (dump_token != 0) {
-            if (token_buffer.size() > 0) {
-                String token_string = "";
-                for (auto tokchar : token_buffer) {
-                    token_string += tokchar;
-                }
-                token_buffer.clear();
-                Token new_tok;
-                new_tok.contents = token_string;
-                new_tok.has_leading_whitespace = next_has_leading_whitespace;
-                new_tok.debug_info.row = linenum;
-                new_tok.debug_info.column = start_column;
-                new_tok.debug_info.length = token_string.length();
-                new_tok.debug_info.source_file = file_name;
-                auto new_tok_type = get_token_type(token_string);
-                new_tok.token_type = new_tok_type;
-                new_tok.category = get_category(new_tok_type);
-                tokens.push_back(new_tok);
-                next_has_leading_whitespace = false;
-            }
+            dump_token_buffer();
             dump_token = 0;
         }
         if (push_tok) {
@@ -363,18 +354,24 @@ optional<LocalVector<Token>> FSLLexer::tokenize(String file_name, String lexee_b
                 case Token::NEWLINE:
                     linenum++;
                     column = 0;
+                    next_has_leading_whitespace = true;
+                    break;
                 case Token::WHITESPACE:
                     next_has_leading_whitespace = true;
+                    column++;
                     break;
                 default:
                     next_has_leading_whitespace = false;
+                    column++;
                     break;
             }
             tokens.push_back(next_tok);
             push_tok = 0;
+        } else {
+            column++;
         }
-        column++;
     }
+    dump_token_buffer();    
     return tokens;
 }
 
@@ -429,6 +426,9 @@ optional<String> FSLLexer::clean(const String &source) {
                 if (curr_char == '*') {
                     state = MAYBE_ENDBLOCK;
                     break;
+                }
+                if (curr_char == '\n' || curr_char == '\r') {
+                    cleaned += curr_char;
                 }
             } break;
             case MAYBE_ENDBLOCK: {

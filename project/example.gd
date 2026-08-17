@@ -26,7 +26,8 @@ var tileLength: float = 250.0;
 func _ready() -> void:
 	#tess_file.print_AST()
 	#fft_file.print_AST()
-	fft_file.get_kernel("ifftRow").print_info()
+	#FSLFile.from_file("res://tests/fsl/validation_error/ve25_type_no_name.fsl").print_AST()
+	#fft_file.get_kernel("ifftRow").print_info()
 	#spectrum_file.get_kernel("tmaSpectrum").print_info()
 	#tess_file.print_AST()
 	baseSpectrumRect.texture = baseSpectrumTex2DRD

@@ -2,18 +2,18 @@
 // Call site matches no overload: wrong argument count and wrong types.
 
 layout(std430) buffer sinkBuf {
-    float[] sink;
+    f32[] sink;
 };
 
-float combine(float a, float b) {
+f32 combine(f32 a, f32 b) {
     return a + b;
 }
 
-float2 combine(float2 a, float2 b) {
+f32x2 combine(f32x2 a, f32x2 b) {
     return a + b;
 }
 
 kernel[1, 1, 1] noMatchingOverload() {
     sink[0] = combine(1.0);
-    sink[1] = combine(float3(1.0, 2.0, 3.0), 2.0).x;
+    sink[1] = combine(f32x3(1.0, 2.0, 3.0), 2.0).x;
 }

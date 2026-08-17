@@ -2,10 +2,10 @@
 // Direct recursion — forbidden (GLSL/SPIR-V compute has no recursion).
 
 layout(std430) buffer sinkBuf {
-    float[] sink;
+    f32[] sink;
 };
 
-float fact(float n) {
+f32 fact(f32 n) {
     if (n <= 1.0) return 1.0;
     return n * fact(n - 1.0);
 }

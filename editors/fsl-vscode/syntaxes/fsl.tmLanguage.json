@@ -7,12 +7,15 @@
     { "include": "#comments" },
     { "include": "#preprocessor" },
     { "include": "#kernel-declaration" },
+    { "include": "#struct-declaration" },
     { "include": "#layout-declaration" },
+    { "include": "#annotations" },
     { "include": "#keywords" },
     { "include": "#specifiers" },
     { "include": "#types" },
     { "include": "#builtin-variables" },
     { "include": "#constants" },
+    { "include": "#type-usage" },
     { "include": "#builtin-functions" },
     { "include": "#function-call" },
     { "include": "#numbers" },
@@ -113,7 +116,14 @@
           "captures": {
             "1": { "name": "keyword.other.kernel.fsl" },
             "2": { "name": "punctuation.section.brackets.begin.fsl" },
-            "3": { "patterns": [{ "include": "#numbers" }, { "include": "#punctuation" }] },
+            "3": {
+              "patterns": [
+                { "include": "#numbers" },
+                { "include": "#constants" },
+                { "include": "#operators" },
+                { "include": "#punctuation" }
+              ]
+            },
             "4": { "name": "punctuation.section.brackets.end.fsl" },
             "5": { "name": "entity.name.function.kernel.fsl" }
           }
@@ -124,7 +134,7 @@
         },
         {
           "name": "meta.name-binding.fsl",
-          "match": "([A-Za-z_]\\w*)\\s*(:)\\s*(GlobalInvocationID)\\b",
+          "match": "([A-Za-z_]\\w*)\\s*(:)\\s*(GlobalInvocationID|LocalInvocationID|LocalInvocationIndex|WorkGroupID|WorkGroupSize|NumWorkGroups)\\b",
           "captures": {
             "1": { "name": "variable.parameter.fsl" },
             "2": { "name": "punctuation.separator.binding.fsl" },
@@ -132,6 +142,14 @@
           }
         }
       ]
+    },
+    "struct-declaration": {
+      "name": "meta.struct.declaration.fsl",
+      "match": "\\b(struct)\\s+([A-Za-z_]\\w*)?",
+      "captures": {
+        "1": { "name": "storage.type.struct.fsl" },
+        "2": { "name": "entity.name.type.struct.fsl" }
+      }
     },
     "layout-declaration": {
       "patterns": [
@@ -141,7 +159,7 @@
         },
         {
           "name": "constant.language.format.buffer.fsl",
-          "match": "\\b(std140|std430|vertex|index)\\b"
+          "match": "\\b(std140|std430)\\b"
         },
         {
           "name": "constant.language.format.texture.fsl",
@@ -149,41 +167,57 @@
         }
       ]
     },
+    "annotations": {
+      "name": "meta.annotation.fsl",
+      "match": "(:)\\s*(specialization_constant|godot_vertex|godot_index|flag_indirect)\\b",
+      "captures": {
+        "1": { "name": "punctuation.separator.annotation.fsl" },
+        "2": { "name": "entity.other.attribute-name.annotation.fsl" }
+      }
+    },
     "keywords": {
       "patterns": [
         {
           "name": "keyword.control.fsl",
-          "match": "\\b(if|else|for|while|do|switch|case|default|break|continue|return|discard)\\b"
+          "match": "\\b(if|else|for|while|do|switch|case|default|break|continue|return)\\b"
         },
         {
           "name": "storage.modifier.resource.fsl",
-          "match": "\\b(uniform|buffer|shared)\\b"
+          "match": "\\b(uniform|buffer)\\b"
         }
       ]
     },
     "specifiers": {
       "name": "storage.modifier.fsl",
-      "match": "\\b(in|out|inout|const)\\b"
+      "match": "\\b(in|out|inout|ref|const|shared)\\b"
     },
     "types": {
       "patterns": [
         {
-          "name": "storage.type.fsl",
-          "match": "\\b(float|double)[234]x[234]\\b"
+          "name": "storage.type.matrix.fsl",
+          "match": "\\b(f16|f32|f64)x[234]x[234]\\b"
         },
         {
           "name": "storage.type.fsl",
-          "match": "\\b(float|int|uint|double|bool)[234]?\\b"
+          "match": "\\b(f16|f32|f64|i8|i16|i32|i64|u8|u16|u32|u64|bool)(x[234])?\\b"
         },
         {
-          "name": "storage.type.glsl.fsl",
-          "match": "\\b(void|[ibud]?vec[234]|mat[234](x[234])?|image2D|image2DArray|image3D|sampler2D|sampler3D|samplerCube)\\b"
+          "name": "storage.type.fsl",
+          "match": "\\bvoid\\b"
+        },
+        {
+          "name": "storage.type.opaque.fsl",
+          "match": "\\b(image|sampler)(1D|2D|3D|CubeMap|1DArray|2DArray|CubeMapArray|Buffer)\\b"
         }
       ]
     },
+    "type-usage": {
+      "name": "entity.name.type.fsl",
+      "match": "\\b[A-Z]\\w*[a-z]\\w*\\b"
+    },
     "builtin-variables": {
       "name": "support.variable.builtin.fsl",
-      "match": "\\b(GlobalInvocationID|gl_GlobalInvocationID|gl_LocalInvocationID|gl_LocalInvocationIndex|gl_WorkGroupID|gl_WorkGroupSize|gl_NumWorkGroups)\\b"
+      "match": "\\b(GlobalInvocationID|LocalInvocationID|LocalInvocationIndex|WorkGroupID|WorkGroupSize|NumWorkGroups)\\b"
     },
     "constants": {
       "patterns": [

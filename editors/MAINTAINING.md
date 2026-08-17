@@ -34,16 +34,23 @@ Structure of the file:
 
 ### Common edits
 
-**Add a keyword** (e.g. the parser learns `struct`): find the relevant rule in the
+**Add a keyword** (e.g. the parser learns `case`): find the relevant rule in the
 repository and extend the alternation:
 
 ```json
-"match": "\\b(if|else|for|while|do|switch|case|default|break|continue|return|discard)\\b"
+"match": "\\b(if|else|for|while|do|switch|case|default|break|continue|return)\\b"
 ```
 
-**Add a type**: the `types` rule has two patterns — FSL aliases and GLSL passthrough.
-The matrix aliases from the main README (`floatNxM`, `doubleNxM`) are already in there,
-ahead of the parser supporting them.
+**Add a type**: the `types` rule has separate patterns for matrices (`f32x4x4`),
+scalars/vectors (`f32`, `u32x2`, `boolx3` — the widths the validator generates),
+`void`, and the opaque image/sampler types. The full opaque-type family from
+`src/fsl/fsl_defs.h` (`image1D`…`imageBuffer`, `sampler*`) is already in there,
+ahead of the lexer supporting more than `image2D`/`image2DArray`.
+
+**Add an annotation**: the `annotations` rule matches only *known* names after a
+`:` (`specialization_constant`, `godot_vertex`, `godot_index`, `flag_indirect`) —
+extend that alternation when the validator learns a new one. Matching any
+identifier after a colon would misfire on the ternary operator's `:`.
 
 **Add a builtin function**: extend the big alternation in `builtin-functions`. Note it
 ends with `(?=\\()` — a lookahead so the name only counts as a builtin when called.
@@ -132,13 +139,17 @@ Scopes currently used, and what themes typically do with them:
 | `keyword.control.fsl` | `if` `for` `return` … | purple/pink |
 | `keyword.other.kernel.fsl` / `.layout.fsl` | `kernel`, `layout` | purple/pink |
 | `keyword.control.directive.*` | `#include` `#define` `#ifdef` … | purple/blue |
-| `storage.type.fsl` | `float2` `uint` `vec3` … | blue/teal |
-| `storage.modifier.fsl` / `.resource.fsl` | `in` `out` `inout` `const`, `uniform` `buffer` | blue italic |
+| `storage.type.fsl` (also `.matrix` / `.opaque`) | `f32` `u32x2` `f32x4x4` `void` `image2D` … | blue/teal |
+| `storage.type.struct.fsl` | the `struct` keyword | blue/purple |
+| `entity.name.type.struct.fsl` | struct names at declaration | yellow/teal |
+| `entity.name.type.fsl` | PascalCase identifiers (heuristic for struct-name *uses* — TextMate has no symbol table, so naming convention stands in for semantics; true use-site resolution would need a language server) | yellow/teal |
+| `storage.modifier.fsl` / `.resource.fsl` | `in` `out` `inout` `ref` `const` `shared`, `uniform` `buffer` | blue italic |
+| `entity.other.attribute-name.annotation.fsl` | `specialization_constant` `godot_vertex` … | yellow/orange |
 | `entity.name.function.kernel.fsl` | kernel names | yellow |
 | `entity.name.function.fsl` | function definitions/calls | yellow |
 | `entity.name.function.preprocessor.fsl` | macro names | yellow |
 | `support.function.builtin.fsl` | `cos` `imageStore` … | teal/cyan |
-| `support.variable.builtin.fsl` | `GlobalInvocationID`, `gl_*` | red/orange |
+| `support.variable.builtin.fsl` | `GlobalInvocationID` `WorkGroupID` … | red/orange |
 | `variable.parameter.fsl` | bound name in `id : GlobalInvocationID` | orange/italic |
 | `constant.numeric.*` | numbers | orange/green |
 | `constant.language.*` | `true` `false` `std430` `rgba32f` | orange |

@@ -2,10 +2,10 @@
 // Buffer member array dims must be compile-time constant; a specialization
 // constant is only pipeline-constant, so this must be rejected.
 
-const uint n : specialization_constant = 8;
+const u32 n : specialization_constant = 8;
 
 layout(std430) buffer specSized {
-    float[n] xs;
+    f32[n] xs;
 };
 
 kernel[1, 1, 1] bufferDimNotComptime() {

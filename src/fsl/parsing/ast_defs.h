@@ -17,6 +17,10 @@ struct DebugInfo {
     uint32_t end_column;
 };
 
+inline DebugInfo from_token_debug_info(const TokenDebugInfo& tok_debug_info) {
+    return {tok_debug_info.source_file, tok_debug_info.row, tok_debug_info.row, tok_debug_info.column, tok_debug_info.column + tok_debug_info.length};
+}
+
 struct FSLNode {
     DebugInfo debug_info;
     bool is_valid = true;
@@ -26,6 +30,7 @@ struct ScopeNode;
 struct IfNode;
 struct ElseNode;
 struct ForNode;
+struct WhileNode;
 struct FunctionDecl;
 
 typedef LocalVector<TokenTree> Statement;
@@ -35,8 +40,8 @@ struct OperationList;
 typedef LocalVector<OperationList> Args;
 
 struct TypeRef : FSLNode {
-    LocalVector<const Token*> specifiers;
-    const Token* type;
+    LocalVector<FSLSpecifier> specifiers;
+    StringName type;
     LocalVector<OperationList> array_dims;
 };
 
@@ -72,7 +77,7 @@ struct ArrayIndex : FSLNode {
 };
 
 struct UnknownOp : FSLNode {
-    Statement code;
+    String code;
 };
 
 typedef sumtype<VariableDecl, Operator, Literal, FieldAccess, ArrayIndex, FuncCall, VariableRef, UnknownOp, OperationList> Operation;
@@ -81,11 +86,17 @@ struct OperationList : FSLNode {
     LocalVector<Operation> operations;
 };
 
-struct ReturnExpression : FSLNode{
+struct ReturnExpression : FSLNode {
     OperationList return_val;
 };
 
-typedef sumtype<OperationList, IfNode, ElseNode, ForNode, ScopeNode, FunctionDecl, ReturnExpression> Expression;
+struct StructDecl : FSLNode {
+    StringName name;
+    LocalVector<VariableDecl> fields;
+    HashMap<StringName, Args> annotations;
+};
+
+typedef sumtype<OperationList, IfNode, ElseNode, ForNode, WhileNode, ScopeNode, FunctionDecl, ReturnExpression, StructDecl> Expression;
 
 struct ScopeNode : FSLNode {
     LocalVector<Expression> body;
@@ -110,35 +121,55 @@ struct ForNode : FSLNode {
     bool is_scoped = true;
 };
 
+struct WhileNode : FSLNode {
+    OperationList cond;
+    ScopeNode body;
+    bool is_do_while;
+    bool is_scoped = true;
+};
+
+struct SwitchNode : FSLNode {
+    OperationList operand;
+    HashMap<String, ScopeNode> body;
+};
+
 struct FunctionDecl : FSLNode {
     StringName name;
-    TypeRef return_type;
+    optional<TypeRef> return_type;
     LocalVector<VariableDecl> args;
     HashMap<StringName, Args> annotations;
     ScopeNode code;
 };
 
-struct TextureDef : FSLNode {
+struct TextureDef {
     TextureFormat format;
     TextureType type;
+    HashMap<StringName, Args> annotations;
 };
 
-struct BufferDef : FSLNode {
+struct BufferDef {
     StringName buffer_name;
     BufferType buftype;
     BufferFormat layout;
     LocalVector<VariableDecl> fields;
+    HashMap<StringName, Args> annotations;
+};
+
+struct UniformDef {
+    VariableDecl uniform_decl;
+    OperationList default_value;
 };
 
 struct ResourceNode : FSLNode {
     StringName name;
-    sumtype<VariableDecl, BufferDef, TextureDef> resource;
+    sumtype<UniformDef, BufferDef, TextureDef> resource;
 };
 
 struct KernelNode : FSLNode {
     StringName name;
     LocalVector<VariableDecl> push_constants;
     HashMap<StringName, String> name_bindings; 
+    HashMap<StringName, Args> annotations;
 
     OperationList local_x_threads;
     OperationList local_y_threads;
@@ -155,17 +186,8 @@ struct GlobalDeclaration : FSLNode {
 class fslAST {
 public:
     StringName filename;
-    LocalVector<Token> tokens;
     LocalVector<GlobalDeclaration> contents;
     fslAST() = default;
-    fslAST& operator=(fslAST&& rhs) {
-        filename = rhs.filename;
-        tokens = std::move(rhs.tokens);
-        contents = std::move(rhs.contents);
-        return *this;
-    }
-    fslAST(const fslAST&) = delete;
-    fslAST(fslAST&&) = default;
 };
 
 inline String tokens_to_string(const LocalVector<Token> &tokens) {
@@ -201,8 +223,27 @@ inline String tokens_to_string(const LocalVector<TokenTree*> &token_tree) {
 }
 
 inline String typeref_to_string(const TypeRef &type_ref) {
-    String output = tokens_to_string(type_ref.specifiers);
-    output += type_ref.type->contents;
+    String output = "";
+    for (const auto& specifier : type_ref.specifiers) {
+        switch (specifier) {
+            case SPECIFIER_IN:
+                output += "in";
+                break;
+            case SPECIFIER_OUT:
+                output += "out";
+                break;
+            case SPECIFIER_INOUT:
+                output += "inout";
+                break;
+            case SPECIFIER_CONST:
+                output += "const";
+                break;
+            case SPECIFIER_SHARED:
+                output += "shared";
+                break;
+        }
+    }
+    output += type_ref.type;
     if (type_ref.array_dims.size() > 0) {
         // for (const auto& array_dim : type_ref.array_dims) {
         //     output += vformat("%s", tokens_to_string(array_dim));

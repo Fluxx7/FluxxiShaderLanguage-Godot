@@ -3,16 +3,16 @@
 // sizing one from a buffer field must be rejected.
 
 layout(std430) buffer paramsBlock {
-    uint runtime_size;
+    u32 runtime_size;
 } params;
 
 layout(std430) buffer sinkBuf {
-    float[] sink;
+    f32[] sink;
 };
 
-shared float[params.runtime_size] cache;
+shared f32[params.runtime_size] cache;
 
 kernel[8, 1, 1] sharedDimRuntime(l : LocalInvocationID) {
-    cache[l.x] = float(l.x);
+    cache[l.x] = f32(l.x);
     sink[l.x] = cache[l.x];
 }

@@ -2,12 +2,12 @@
 // Annotation name that does not exist. Grammar allows any identifier after
 // the colon; the validator must reject unknown annotation names.
 
-const uint x : totally_made_up_annotation = 1;
+const u32 x : totally_made_up_annotation = 1;
 
 layout(std430) buffer sinkBuf {
-    float[] sink;
+    f32[] sink;
 };
 
 kernel[1, 1, 1] unknownAnnotation() {
-    sink[0] = float(x);
+    sink[0] = f32(x);
 }

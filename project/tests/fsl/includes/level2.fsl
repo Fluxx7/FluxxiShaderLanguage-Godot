@@ -6,7 +6,7 @@
 
 #include "math_common.fsl"
 
-float quad(float x) {
+f32 quad(f32 x) {
     return sqr(sqr(x));
 }
 

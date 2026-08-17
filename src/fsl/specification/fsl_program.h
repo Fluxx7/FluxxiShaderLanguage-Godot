@@ -1,6 +1,7 @@
 #pragma once
 
 #include "godot_imports.h"
+#include "std_imports.h"
 
 namespace FSL {
 
@@ -11,6 +12,10 @@ enum ExprType {
 };
 
 
+
+struct Variable {
+
+};
 struct Operation {
 
 };
@@ -20,7 +25,7 @@ struct Scope {
 struct Expression {
 
 };
-struct Kernel {
+struct SpecializationConstant {
 
 };
 struct Buffer {
@@ -29,10 +34,30 @@ struct Buffer {
 struct Texture {
 
 };
+typedef sumtype<Buffer, Texture> Resource;
+
 struct Function {
 
 };
+
+struct Kernel {
+    struct UniformSet {
+        HashMap<uint32_t, Resource> bindings;
+    };
+    StringName name;
+    sumtype<uint32_t, StringName> local_size[3];
+    LocalVector<SpecializationConstant> specialization_constants;
+    HashMap<uint32_t, UniformSet> uniform_sets;
+    HashMap<StringName, Resource> used_resources;
+    HashMap<StringName, Variable> push_constants;
+    Scope body;
+};
+
+
+typedef sumtype<Variable, Function, Kernel, Resource> GlobalExpression;
+
 struct Program {
+    LocalVector<GlobalExpression> contents;
 };
 
 }

@@ -21,14 +21,17 @@ void FSLStorageBuffer::_rebuild() {
 }
 
 uint32_t FSLStorageBuffer::_get_fields_size_bytes(uint32_t unsized_count) {
-    uint32_t new_size_bytes = 0;
-    for (const auto &[_field_name, field] : buffer_info.fields) {
-        new_size_bytes += get_fsl_type_size(field.type, unsized_count);
+    uint32_t size = 0;
+    for (const auto& [_name, field] : buffer_info.fields) {
+        size += get_fsl_type_layout(field.type, unsized_count, buffer_info.format).size;
     }
-    return new_size_bytes;
+    return size;
 }
 
 void FSLStorageBuffer::_init_buffer() {
+    for (const auto& flag : buffer_info.usage_flags) {
+        flag_long |= flag;
+    }
     _update_size_bytes(_get_fields_size_bytes());
 }
 
@@ -97,10 +100,7 @@ void FSLStorageBuffer::set_buffer(TypedDictionary<StringName, Variant> values) {
 }
 
 void FSLStorageBuffer::set_unsized_element_count(uint32_t num_elements) {
-    if (!buffer_info.has_unsized_field) {
-        ERR_PRINT_ONCE("Buffer has no unsized array field");
-        return;
-    }
+    ERR_FAIL_COND_MSG(buffer_info.tail_stride == 0, "Buffer has no unsized array field");
     _update_size_bytes(_get_fields_size_bytes(num_elements));
 }
 

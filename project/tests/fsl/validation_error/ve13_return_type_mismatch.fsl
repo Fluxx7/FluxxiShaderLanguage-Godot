@@ -1,12 +1,12 @@
 //! EXPECT: validation_error
-// Function declared to return float but returns float2.
+// Function declared to return f32 but returns f32x2.
 
 layout(std430) buffer sinkBuf {
-    float[] sink;
+    f32[] sink;
 };
 
-float wrongReturn(float x) {
-    return float2(x, x);
+f32 wrongReturn(f32 x) {
+    return f32x2(x, x);
 }
 
 kernel[1, 1, 1] returnMismatch() {

@@ -31,12 +31,15 @@ protected:
         return typed_res;
     }
 public:
+    ComputeGroup();
     static Ref<ComputeGroup> make_new(RenderingDevice* rd);
 
     void print_info();
 
     void add_kernel(ComputeKernel::KernelInfo kernel_info, String kernel_source);
     Ref<ComputeKernel> get_kernel(StringName kernel_name);
+
+    void set_specialization_constant(StringName spec_constant, Variant value);
 
     Ref<FSLStorageBuffer> get_storage_buffer(const StringName &buffer_name);
     Ref<FSLUniformBuffer> get_uniform_buffer(const StringName &buffer_name);
@@ -50,4 +53,6 @@ public:
 
     void assign_resource(Ref<FSLResource> resource, StringName resource_name);
     void dispatch(StringName kernel_name, uint32_t x_invocations, uint32_t y_invocations, uint32_t z_invocations, TypedDictionary<StringName, Variant> push_constants = {});
+    void dispatch_workgroups(StringName kernel_name, uint32_t x_workgroups, uint32_t y_workgroups, uint32_t z_workgroups, TypedDictionary<StringName, Variant> push_constants = {});
+    void dispatch_indirect(StringName kernel_name, Ref<FSLBuffer> command_buffer, uint32_t offset, TypedDictionary<StringName, Variant> push_constants);
 };

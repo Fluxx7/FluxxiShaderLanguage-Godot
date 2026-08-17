@@ -91,7 +91,7 @@ void FSLTexture2DArray::set_texture(uint32_t tex_width, uint32_t tex_height, uin
 }
 
 Ref<FSLTextureView> FSLTexture2DArray::get_mip_view(uint32_t mip_level) {
-	return FSLTextureView::new_mip_view(rd, this, mip_level, static_cast<RenderingDevice::TextureSliceType>(3));
+	return FSLTextureView::new_mip_view(rd, this, mip_level, RenderingDevice::TEXTURE_SLICE_2D_ARRAY);
 }
 
 Ref<FSLTextureView> FSLTexture2DArray::get_mip_layer_view(uint32_t mip_level, uint32_t layer) {

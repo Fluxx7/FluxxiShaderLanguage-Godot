@@ -17,34 +17,21 @@ void FSLUniformBuffer::_rebuild() {
     rebuilt = true;
 }
 
-uint32_t FSLUniformBuffer::_get_fields_size_bytes(uint32_t unsized_count) {
-    uint32_t new_size_bytes = 0;
-    for (const auto &[_field_name, field] : buffer_info.fields) {
-        new_size_bytes += get_fsl_type_size(field.type, unsized_count);
+uint32_t FSLUniformBuffer::_get_fields_size_bytes() {
+    uint32_t size = 0;
+    for (const auto& [_name, field] : buffer_info.fields) {
+        size += get_fsl_type_layout(field.type, 0, STD140).size;
     }
-    return new_size_bytes;
+    return size;
 }
 
 void FSLUniformBuffer::_init_buffer() {
-    _update_size_bytes(_get_fields_size_bytes());
-}
-
-void FSLUniformBuffer::_update_size_bytes(uint32_t new_size_bytes, PackedByteArray data) {
-    if (size_bytes != new_size_bytes) {
-        size_bytes = new_size_bytes;
-        data_cache = data;
-        _rebuild();
-    }
+    size_bytes = _get_fields_size_bytes();
+    _rebuild();
 }
 
 void FSLUniformBuffer::_push_buffer_values(uint32_t offset, PackedByteArray values) {
-    uint32_t size_required = offset + values.size();
-    if (size_required != size_bytes) {
-        PackedByteArray new_data;
-        _update_size_bytes(size_required, new_data);
-    } else {
-        rd->buffer_update(rid, offset, values.size(), values);
-    }
+    rd->buffer_update(rid, offset, values.size(), values);
 }
 
 Ref<FSLUniformBuffer> FSLUniformBuffer::new_buffer(RenderingDevice *new_rd, BufferInfo buf_info) {

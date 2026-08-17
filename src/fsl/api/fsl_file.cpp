@@ -4,12 +4,12 @@
 using namespace AST;
 void print_operation(const Operation& op, ConsoleString& output);
 void print_expression(const Expression& expression, ConsoleString &output);
-void print_resource_node(ResourceNode& resource_node, ConsoleString &output);
-void print_buffer_def(BufferDef& buf_def, ConsoleString &output);
-void print_texture_def(TextureDef& tex_def, ConsoleString &output);
-void print_variable_decl(VariableDecl& var_decl, ConsoleString &output);
-void print_scope_node(ScopeNode& block_node, ConsoleString &output);
-void print_func_decl(FunctionDecl& func_decl, ConsoleString &output);
+void print_resource_node(const ResourceNode& resource_node, ConsoleString &output);
+void print_buffer_def(const BufferDef& buf_def, ConsoleString &output);
+void print_texture_def(const TextureDef& tex_def, ConsoleString &output);
+void print_variable_decl(const VariableDecl& var_decl, ConsoleString &output);
+void print_scope_node(const ScopeNode& block_node, ConsoleString &output);
+void print_func_decl(const FunctionDecl& func_decl, ConsoleString &output);
 
 /******** STATIC METHODS *********/
 void FSLFile::_bind_methods() {
@@ -20,6 +20,11 @@ void FSLFile::_bind_methods() {
     ClassDB::bind_static_method("FSLFile", D_METHOD("from_file", "file_path"), &FSLFile::from_file);
 }
 
+HashMap<StringName, optional<FSLFile::FileData>>& FSLFile::get_compilation_cache() {
+    static HashMap<StringName, optional<FSLFile::FileData>> compilation_cache;
+    return compilation_cache;
+}
+
 Ref<FSLFile> FSLFile::from_file(String file_path) {
 	return Ref<FSLFile>(memnew(FSLFile(file_path)));
 }
@@ -27,18 +32,18 @@ Ref<FSLFile> FSLFile::from_file(String file_path) {
 /******** CONSTRUCTORS *********/
 
 FSLFile::FSLFile(String file_path) {
-    path = file_path;
+	path = file_path;
     load_shader();
 }
 
 /******** PUBLIC METHODS *********/
 
 String FSLFile::get_kernel_source(StringName kernel_name) {
-    if (compute_kernels.find(kernel_name) != compute_kernels.end()) {
-        return compute_kernels[kernel_name].source;
+    ERR_FAIL_COND_V_EDMSG(file_data == nullptr, "", "Shader file is not loaded, check error messages for more detail");
+    if (file_data->compute_kernels.find(kernel_name) != file_data->compute_kernels.end()) {
+        return file_data->compute_kernels[kernel_name].source;
     }
-    print_error(vformat("Could not find kernel with name \"%s\"", kernel_name));
-	return String();
+    ERR_FAIL_V_EDMSG("", vformat("Could not find kernel with name \"%s\"", kernel_name));
 }
 
 Ref<ComputeKernel> FSLFile::get_kernel(StringName kernel_name, RenderingDevice *rd = nullptr) {
@@ -49,12 +54,12 @@ Ref<ComputeKernel> FSLFile::get_kernel(StringName kernel_name, RenderingDevice *
             ERR_FAIL_NULL_V(rd, Ref<ComputeKernel>());
         }
     }
-    if (compute_kernels.find(kernel_name) != compute_kernels.end()) {
-        auto new_kernel = ComputeKernel::make_new(compute_kernels[kernel_name].source, compute_kernels[kernel_name].info, rd);
+    ERR_FAIL_COND_V_EDMSG(file_data == nullptr, memnew(ComputeKernel), "Shader file is not loaded, check error messages for more detail");
+    if (file_data->compute_kernels.find(kernel_name) != file_data->compute_kernels.end()) {
+        auto new_kernel = ComputeKernel::make_new(file_data->compute_kernels[kernel_name].source, file_data->compute_kernels[kernel_name].info, rd);
         return new_kernel;
     }
-    print_error(vformat("Could not find kernel with name \"%s\"", kernel_name));
-	return Ref<ComputeKernel>();
+    ERR_FAIL_V_EDMSG(memnew(ComputeKernel), vformat("Could not find kernel with name \"%s\"", kernel_name));
 }
 
 Ref<ComputeGroup> FSLFile::get_kernel_group(RenderingDevice *rd) {
@@ -66,7 +71,8 @@ Ref<ComputeGroup> FSLFile::get_kernel_group(RenderingDevice *rd) {
         }
     }
     Ref<ComputeGroup> compute_group = ComputeGroup::make_new(rd);
-    for (const auto& [kernel_name, kernel_def] : compute_kernels) {
+    ERR_FAIL_COND_V_EDMSG(file_data == nullptr, compute_group, "Shader file is not loaded, check error messages for more detail");
+    for (const auto& [kernel_name, kernel_def] : file_data->compute_kernels) {
         compute_group->add_kernel(kernel_def.info, kernel_def.source);
     }
 	return compute_group;
@@ -76,23 +82,43 @@ Ref<ComputeGroup> FSLFile::get_kernel_group(RenderingDevice *rd) {
 
 
 void FSLFile::load_shader() {
-    auto ast_out = FSLParser::get_ast(path);
-    if (!ast_out.has_value()) {
-        print_error(vformat("Failed to load shader file at \"%s\", check error messages for more detail", path));
+    auto& comp_cache = get_compilation_cache();
+    if (!comp_cache.has(path)) {
+        auto [ast_out, error_source_pair] = FSLParser::get_ast(path);
+        auto [ast_errors, file_sources] = std::move(error_source_pair);
+        if (!ast_errors.is_empty() || !ast_out.has_value()) {
+            for (const auto& error : ast_errors) {
+                print_fsl_error(error, &file_sources);
+            }
+            print_error(vformat("Shader file \"%s\" failed to compile, see error messages for more details", path));
+            comp_cache[path] = {};
+            file_data = nullptr;
+            return;
+        } else {
+            comp_cache[path] = {CodeBuilder::get_kernels(std::move(*ast_out))};
+        }
+        
+    } else if (!comp_cache[path].has_value()) {
+        print_error(vformat("Cached shader file at \"%s\" failed to compile, check error messages for more detail", path));
+        file_data = nullptr;
         return;
     }
-    currAst = std::move(*ast_out);
-    compute_kernels = CodeBuilder::get_kernels(currAst);
+    file_data = &*comp_cache[path];
 }
 
 
 void FSLFile::print_AST() {
+    auto [debug_ast, _] = FSLParser::get_ast(path);
+    if (!debug_ast.has_value()) {
+        print_error(vformat("Could not compile AST for shader file \"%s\", check error messages for more detail", path));
+        return;
+    }
     ConsoleString output;
     output.add_line("fslAST {");
     output.indent();
-    for (GlobalDeclaration &decl : currAst.contents) {
+    for (GlobalDeclaration &decl : debug_ast->contents) {
         std::visit(overload{
-            [&](Expression &expression)          { 
+            [&](Expression &expression) { 
                 print_expression(expression, output);
             },
             [&](KernelNode &kernel)      { 
@@ -149,7 +175,7 @@ void FSLFile::print_AST() {
     output.print();
 }
 
-void print_type(TypeRef &type_ref, ConsoleString &output) {
+void print_type(const TypeRef &type_ref, ConsoleString &output) {
     output.add_line("TypeRef {");
     output.indent();
     if (!type_ref.is_valid) {
@@ -159,9 +185,13 @@ void print_type(TypeRef &type_ref, ConsoleString &output) {
         return;
     }
     if (!type_ref.specifiers.is_empty()) {
-        output.add_line("Specifiers: %s,", tokens_to_string(type_ref.specifiers));
+        output.add("Specifiers: ");
+        for(const auto& specifier : type_ref.specifiers) {
+            output.add("%s ", specifier_to_string(specifier));
+        }
+        output.add_line(",");
     }
-    output.add_line("Type: %s,", type_ref.type->contents);
+    output.add_line("Type: %s,", type_ref.type);
     if (type_ref.array_dims.size() > 0) {
         output.add_line("Array dimensions {");
         output.indent();
@@ -263,19 +293,39 @@ void print_operation(const Operation &op, ConsoleString &output) {
         [&](UnknownOp error_op) {
             output.add_line("Error {");
             output.indent();
-            output.add_line("Code: %s", tokens_to_string(error_op.code));
+            output.add_line("Code: %s", error_op.code);
             output.unindent();
             output.add_line("},");
         }
     }, op);
 }
 
+void print_struct_decl(const StructDecl& struct_decl, ConsoleString& output) {
+    output.add_line("StructDecl {");
+    output.indent();
+    if (!struct_decl.is_valid) {
+        output.add_line("Error");
+        output.unindent();
+        output.add_line("},");
+        return;
+    }
+    output.add_line("Name: %s,", struct_decl.name);
+    output.add_line("Fields {");
+    output.indent();
+    for (auto &field : struct_decl.fields) {
+        print_variable_decl(field, output);
+    }
+    output.unindent();
+    output.add_line("},");
+    
+}
+
 void print_expression(const Expression &expression, ConsoleString &output) {
 	std::visit(overload{
-        [&](Operation op_expression) {
+        [&](const Operation& op_expression) {
             print_operation(op_expression, output);
         },
-        [&](IfNode if_node) {
+        [&](const IfNode& if_node) {
             output.add_line("IfNode {");
             output.indent();
             if (!if_node.is_valid) {
@@ -298,7 +348,7 @@ void print_expression(const Expression &expression, ConsoleString &output) {
             output.add_line("},");
             
         },
-        [&](ElseNode else_node) {
+        [&](const ElseNode& else_node) {
             output.add_line("ElseNode {");
             output.indent();
             if (!else_node.is_valid) {
@@ -320,7 +370,7 @@ void print_expression(const Expression &expression, ConsoleString &output) {
             output.unindent();
             output.add_line("},");
         },
-        [&](ForNode for_node) {
+        [&](const ForNode& for_node) {
             output.add_line("ForNode {");
             output.indent();
             if (!for_node.is_valid) {
@@ -352,13 +402,39 @@ void print_expression(const Expression &expression, ConsoleString &output) {
             output.unindent();
             output.add_line("},");
         },
-        [&](ScopeNode subblock) {
+        [&](const WhileNode& while_node) {
+            output.add_line("WhileNode {");
+            output.indent();
+            if (!while_node.is_valid) {
+                output.add_line("Error");
+                output.unindent();
+                output.add_line("},");
+                return;
+            }
+            output.add_line("Condition {");
+            output.indent();
+            print_operation(while_node.cond, output);
+            output.unindent();
+            output.add_line("},");
+            output.add_line("Body {");
+            output.indent();
+            print_scope_node(while_node.body, output);
+            output.unindent();
+            output.add_line("},");
+            output.unindent();
+            output.add_line("},");
+            
+        },
+        [&](const ScopeNode& subblock) {
             print_scope_node(subblock, output);
         },
-        [&](FunctionDecl func_decl) {
+        [&](const FunctionDecl& func_decl) {
             print_func_decl(func_decl, output);
         },
-        [&](ReturnExpression ret_expr) {
+        [&](const StructDecl& struct_decl) {
+            print_struct_decl(struct_decl, output);
+        },
+        [&](const ReturnExpression& ret_expr) {
             output.add_line("ReturnExpression {");
             output.indent();
             if (!ret_expr.is_valid) {
@@ -374,7 +450,22 @@ void print_expression(const Expression &expression, ConsoleString &output) {
     }, expression);
 }
 
-void print_resource_node(ResourceNode &resource_node, ConsoleString &output) {
+void print_annotation_list(const HashMap<StringName, Args>& annotations, ConsoleString& output) {
+    for (const auto& [name, args] : annotations) {
+        output.add("Name: %s,", name);
+        if (!args.is_empty()) {
+            output.add_line(" Args: {");
+            output.indent();
+            for (const auto& arg : args) {
+                print_operation(arg, output);
+            }
+            output.unindent();
+            output.add_line("},");
+        }
+    }
+}
+
+void print_resource_node(const ResourceNode &resource_node, ConsoleString &output) {
 	output.add_line("ResourceNode {");
     output.indent();
     if (!resource_node.is_valid) {
@@ -385,34 +476,35 @@ void print_resource_node(ResourceNode &resource_node, ConsoleString &output) {
     }
     output.add_line("Name: %s,", resource_node.name);
     std::visit(overload{
-        [&](BufferDef &buffer)          { 
+        [&](const BufferDef &buffer)          { 
             print_buffer_def(buffer, output);
         },
-        [&](TextureDef &texture) { 
+        [&](const TextureDef &texture) { 
             print_texture_def(texture, output);
         },
-        [&](VariableDecl &uniform)  {
-            print_variable_decl(uniform, output);
+        [&](const UniformDef &uniform)  {
+            print_variable_decl(uniform.uniform_decl, output);
         }
     }, resource_node.resource);
     output.unindent();
     output.add_line("},");
 }
 
-void print_buffer_def(BufferDef &buf_def, ConsoleString &output) {
+void print_buffer_def(const BufferDef &buf_def, ConsoleString &output) {
     output.add_line("BufferDef {");
     output.indent();
-    if (!buf_def.is_valid) {
-        output.add_line("Error");
-        output.unindent();
-        output.add_line("},");
-        return;
-    }
     if (!buf_def.buffer_name.is_empty()) {
         output.add_line("Local name: %s,", buf_def.buffer_name);
     }
     output.add_line("Type: %s,", bufferType_to_string(buf_def.buftype));
     output.add_line("Layout: %s,", bufferFormat_to_string(buf_def.layout));
+    if (!buf_def.annotations.is_empty()) {
+        output.add_line("Annotations {");
+        output.indent();
+        print_annotation_list(buf_def.annotations, output);
+        output.unindent();
+        output.add_line("},");
+    }
     output.add_line("Buffer fields {");
     output.indent();
     for (auto field : buf_def.fields) {
@@ -424,22 +516,16 @@ void print_buffer_def(BufferDef &buf_def, ConsoleString &output) {
     output.add_line("},");
 }
 
-void print_texture_def(TextureDef& tex_def, ConsoleString &output) {
+void print_texture_def(const TextureDef& tex_def, ConsoleString &output) {
     output.add_line("TextureDef {");
     output.indent();
-    if (!tex_def.is_valid) {
-        output.add_line("Error");
-        output.unindent();
-        output.add_line("},");
-        return;
-    }
     output.add_line("Type: %s,", textureType_to_string(tex_def.type));
     output.add_line("Format: %s,", textureFormat_to_string(tex_def.format));
     output.unindent();
     output.add_line("},");
 }
 
-void print_variable_decl(VariableDecl& var_decl, ConsoleString &output) {
+void print_variable_decl(const VariableDecl& var_decl, ConsoleString &output) {
     output.add_line("VariableDecl {");
     output.indent();
     if (!var_decl.is_valid) {
@@ -457,18 +543,7 @@ void print_variable_decl(VariableDecl& var_decl, ConsoleString &output) {
     if (!var_decl.annotations.is_empty()) {
         output.add_line("Annotations {");
         output.indent();
-        for (const auto& [name, args] : var_decl.annotations) {
-            output.add("Name: %s,", name);
-            if (!args.is_empty()) {
-                output.add_line(" Args: {");
-                output.indent();
-                for (const auto& arg : args) {
-                    print_operation(arg, output);
-                }
-                output.unindent();
-                output.add_line("},");
-            }
-        }
+        print_annotation_list(var_decl.annotations, output);
         output.unindent();
         output.add_line("},");
     }
@@ -476,7 +551,7 @@ void print_variable_decl(VariableDecl& var_decl, ConsoleString &output) {
     output.add_line("},");
 }
 
-void print_scope_node(ScopeNode& block_node, ConsoleString &output) {
+void print_scope_node(const ScopeNode& block_node, ConsoleString &output) {
     output.add_line("ScopeNode {");
     output.indent();
     if (!block_node.is_valid) {
@@ -492,7 +567,7 @@ void print_scope_node(ScopeNode& block_node, ConsoleString &output) {
     output.add_line("},");
 }
 
-void print_func_decl(FunctionDecl &func_decl, ConsoleString &output) {
+void print_func_decl(const FunctionDecl &func_decl, ConsoleString &output) {
     output.add_line("FunctionDecl {");
     output.indent();
     if (!func_decl.is_valid) {
@@ -502,11 +577,14 @@ void print_func_decl(FunctionDecl &func_decl, ConsoleString &output) {
         return;
     }
     output.add_line("Name: %s,", func_decl.name);
-    output.add_line("Return type {");
-    output.indent();
-    print_type(func_decl.return_type, output);
-    output.unindent();
-    output.add_line("},");
+    if (func_decl.return_type.has_value()) {
+        output.add_line("Return type {");
+        output.indent();
+        print_type(*func_decl.return_type, output);
+        output.unindent();
+        output.add_line("},");
+    }
+    
     if (func_decl.args.size() > 0) {
         output.add_line("Arguments {");
         output.indent();

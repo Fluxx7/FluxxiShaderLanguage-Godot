@@ -2,10 +2,10 @@
 // A literal passed to an out parameter — out args must be writable lvalues.
 
 layout(std430) buffer sinkBuf {
-    float[] sink;
+    f32[] sink;
 };
 
-void produce(out float v) {
+void produce(out f32 v) {
     v = 1.0;
 }
 

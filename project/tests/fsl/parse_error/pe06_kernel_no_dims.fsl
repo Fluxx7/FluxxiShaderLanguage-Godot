@@ -2,5 +2,5 @@
 // Kernel declaration missing the required [x, y, z] local-size brackets.
 
 kernel noDims(id : GlobalInvocationID) {
-    float x = 1.0;
+    f32 x = 1.0;
 }

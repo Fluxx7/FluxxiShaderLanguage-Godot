@@ -2,5 +2,5 @@
 // Kernel declaration with dims and args but no name.
 
 kernel[8, 8, 1] (id : GlobalInvocationID) {
-    float x = 1.0;
+    f32 x = 1.0;
 }

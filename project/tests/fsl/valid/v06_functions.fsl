@@ -7,39 +7,39 @@
 // graph: funcKernel must bind fnBuf even though it never touches it directly).
 
 layout(std430) buffer fnBuf {
-    float[] fn_out;
+    f32[] fn_out;
 };
 
-float blend(float a, float b) { return a + b; }
-float2 blend(float2 a, float2 b) { return a + b; }
-float2 blend(float a, float2 b) { return float2(a, a) + b; }
-float blend(float a, float b, float t) { return a * (1.0 - t) + b * t; }
+f32 blend(f32 a, f32 b) { return a + b; }
+f32x2 blend(f32x2 a, f32x2 b) { return a + b; }
+f32x2 blend(f32 a, f32x2 b) { return f32x2(a, a) + b; }
+f32 blend(f32 a, f32 b, f32 t) { return a * (1.0 - t) + b * t; }
 
-void split(float v, out float lo, out float hi) {
+void split(f32 v, out f32 lo, out f32 hi) {
     lo = fract(v);
     hi = v - lo;
 }
 
-void accumulate(inout float acc, const in float amount) {
+void accumulate(inout f32 acc, const in f32 amount) {
     acc += amount;
 }
 
-float depth3(uint i, float v) {
+f32 depth3(u32 i, f32 v) {
     fn_out[i] = v;
     return v * 2.0;
 }
-float depth2(uint i, float v) { return depth3(i, v + 1.0); }
-float depth1(uint i, float v) { return depth2(i, blend(v, 2.0, 0.5)); }
+f32 depth2(u32 i, f32 v) { return depth3(i, v + 1.0); }
+f32 depth1(u32 i, f32 v) { return depth2(i, blend(v, 2.0, 0.5)); }
 
-float noArgs() { return 42.0; }
+f32 noArgs() { return 42.0; }
 
-kernel[32, 1, 1] funcKernel(id : GlobalInvocationID, float t) {
-    float lo = 0.0;
-    float hi = 0.0;
-    split(t * float(id.x), lo, hi);
-    float acc = noArgs();
+kernel[32, 1, 1] funcKernel(id : GlobalInvocationID, f32 t) {
+    f32 lo = 0.0;
+    f32 hi = 0.0;
+    split(t * f32(id.x), lo, hi);
+    f32 acc = noArgs();
     accumulate(acc, lo);
-    float2 v2 = blend(hi, float2(lo, acc));
+    f32x2 v2 = blend(hi, f32x2(lo, acc));
     acc = blend(v2.x, v2.y) + blend(lo, hi, 0.25);
     depth1(id.x, acc);
 }

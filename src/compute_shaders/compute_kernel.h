@@ -20,7 +20,7 @@ class ComputeKernel : public RefCounted {
 public:
     struct SpecializationConstant {
         uint32_t constant_id;
-        uint32_t value;
+        Variant value;
     };
     struct KernelInfo {
         StringName kernel_name;
@@ -49,12 +49,12 @@ protected:
         const Ref<FSLResource> *res = fsl_resources.getptr(res_name);
         ERR_FAIL_NULL_V_MSG(res, Ref<T>(), vformat("Kernel has no resource named \'%s\'", res_name));
         Ref<T> typed_res = *res;
-        ERR_FAIL_COND_V_MSG(typed_res.is_null(), Ref<T>(), vformat("Resource \'%s\' is a %s, not a %s", (*res)->get_class(), T::get_class_static()));
+        ERR_FAIL_COND_V_MSG(typed_res.is_null(), Ref<T>(), vformat("Resource \'%s\' is a %s, not a %s", res_name, (*res)->get_class(), T::get_class_static()));
         return typed_res;
     }
     uint32_t get_min_workgroup_count(sumtype<uint32_t, StringName> local_invocation_var, uint32_t requested_invocations);
 public:
-    ComputeKernel() = default;
+    ComputeKernel();
     RenderingDevice* kernel_rd;
 
     RID shader_comp = RID();
@@ -62,7 +62,7 @@ public:
     
     Ref<RDShaderSPIRV> shader_spirv;
 
-    static Ref<ComputeKernel> make_new(String source, KernelInfo info, RenderingDevice* rd);
+    static Ref<ComputeKernel> make_new(String source, KernelInfo info, RenderingDevice* rd = nullptr);
 
     void _assign_resource(Ref<FSLResource> resource, uint32_t set, uint32_t binding);
     
@@ -70,10 +70,16 @@ public:
 
     void assign_resource(Ref<FSLResource> resource, StringName resource_name);
     bool try_assign_resource(Ref<FSLResource> resource, StringName resource_name);
+
     void dispatch(uint32_t x_invocations, uint32_t y_invocations, uint32_t z_invocations, TypedDictionary<StringName, Variant> push_constants = {});
     void dispatch_workgroups(uint32_t x_workgroups, uint32_t y_workgroups, uint32_t z_workgroups, TypedDictionary<StringName, Variant> push_constants = {});
+    void dispatch_indirect(Ref<FSLBuffer> command_buffer, uint32_t offset, TypedDictionary<StringName, Variant> push_constants);
     
     std::tuple<uint32_t, uint32_t, uint32_t> get_workgroups(uint32_t x_invocations, uint32_t y_invocations, uint32_t z_invocations);
+    
+    Variant get_specialization_constant_value(StringName spec_constant);
+    void set_specialization_constant(StringName spec_constant, Variant value);
+    bool try_set_specialization_constant(StringName spec_constant, Variant value);
 
     Ref<FSLStorageBuffer> get_storage_buffer(const StringName &buffer_name);
     Ref<FSLUniformBuffer> get_uniform_buffer(const StringName &buffer_name);
@@ -107,7 +113,6 @@ public:
 class ComputePlan : public RefCounted {
     GDCLASS(ComputePlan, RefCounted)
 private:
-    ComputePlan() = default;
 protected:
     enum ComputePlanItem {
         Shader,
@@ -115,8 +120,15 @@ protected:
         Plan
     };
     struct ShaderDispatch {
+        struct DirectDispatch {
+            uint32_t x, y, z;
+        };
+        struct IndirectDispatch {
+            Ref<FSLBuffer> command_buffer;
+            uint32_t offset;
+        };
         Ref<ComputeKernel> shader;
-        uint32_t workgroups[3] = {1, 1, 1};
+        sumtype<DirectDispatch, IndirectDispatch> dispatch_target = DirectDispatch{1, 1, 1};
         TypedDictionary<StringName, Variant> push_constants = {};
     };
     static void _bind_methods();
@@ -131,10 +143,12 @@ protected:
 public:
     RenderingDevice* plan_rd;
     static Ref<ComputePlan> make_new(RenderingDevice* rd);
+    ComputePlan();
     ~ComputePlan() override = default;
     void add_plan(Ref<ComputePlan> subplan, bool is_temp = false);
     void dispatch();
     Ref<ComputePlan> add_barrier(bool is_temp = false);
     Ref<ComputePlan> add_kernel(Ref<ComputeKernel> kernel, uint32_t x_invocations, uint32_t y_invocations, uint32_t z_invocations, TypedDictionary<StringName, Variant> push_constants = {}, bool is_temp = false);
     Ref<ComputePlan> add_kernel_workgroups(Ref<ComputeKernel> kernel, uint32_t x_workgroups, uint32_t y_workgroups, uint32_t z_workgroups, TypedDictionary<StringName, Variant> push_constants = {}, bool is_temp = false);
+    Ref<ComputePlan> add_kernel_indirect(Ref<ComputeKernel> kernel, Ref<FSLBuffer> command_buffer, uint32_t offset, TypedDictionary<StringName, Variant> push_constants = {}, bool is_temp = false);
 };

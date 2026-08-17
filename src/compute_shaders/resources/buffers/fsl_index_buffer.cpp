@@ -1,8 +1,9 @@
 #include "../fsl_buffer.h"
+#include "fsl_buffer.h"
 
 void FSLIndexBuffer::_bind_methods() {
-    ClassDB::bind_method(D_METHOD("set_field", "field", "value"), &FSLIndexBuffer::set_field);
-    ClassDB::bind_method(D_METHOD("set_buffer", "values"), &FSLIndexBuffer::set_buffer);
+    ClassDB::bind_method(D_METHOD("set_index_count", "num_indices"), &FSLIndexBuffer::set_index_count);
+    ClassDB::bind_method(D_METHOD("set_index_format", "new_format"), &FSLIndexBuffer::set_index_format);
 }
 
 void FSLIndexBuffer::_rebuild() {
@@ -10,40 +11,21 @@ void FSLIndexBuffer::_rebuild() {
         rd->free_rid(rid);
     }
     rduniform = memnew(RDUniform);
-    rid = rd->index_buffer_create(size_bytes, RenderingDevice::INDEX_BUFFER_FORMAT_UINT32, data_cache, flag_long);
+    rid = rd->index_buffer_create(index_count, index_format, {}, false, flag_long | RenderingDevice::BUFFER_CREATION_AS_STORAGE_BIT);
     rduniform->set_uniform_type(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER);
     rduniform->add_id(rid);
     emit_signal("rid_changed", rid);
     rebuilt = true;
 }
 
-uint32_t FSLIndexBuffer::_get_fields_size_bytes(uint32_t unsized_count) {
-    uint32_t new_size_bytes = 0;
-    for (const auto &[_field_name, field] : buffer_info.fields) {
-        new_size_bytes += get_fsl_type_size(field.type, unsized_count);
-    }
-    return new_size_bytes;
-}
-
 void FSLIndexBuffer::_init_buffer() {
-    _update_size_bytes(_get_fields_size_bytes());
+    _update_index_count(1);
 }
 
-void FSLIndexBuffer::_update_size_bytes(uint32_t new_size_bytes, PackedByteArray data) {
-    if (size_bytes != new_size_bytes) {
-        size_bytes = new_size_bytes;
-        data_cache = data;
+void FSLIndexBuffer::_update_index_count(uint32_t new_index_count) {
+    if (index_count != new_index_count) {
+        index_count = new_index_count;
         _rebuild();
-    }
-}
-
-void FSLIndexBuffer::_push_buffer_values(uint32_t offset, PackedByteArray values) {
-    uint32_t size_required = offset + values.size();
-    if (size_required != size_bytes) {
-        PackedByteArray new_data;
-        _update_size_bytes(size_required, new_data);
-    } else {
-        rd->buffer_update(rid, offset, values.size(), values);
     }
 }
 
@@ -63,44 +45,19 @@ Ref<FSLIndexBuffer> FSLIndexBuffer::new_buffer(RenderingDevice *new_rd, BufferIn
 	return new_buf;
 }
 
-void FSLIndexBuffer::set_field(StringName field, Variant value) {
-    if (!buffer_info.fields.has(field)) {
-        ERR_PRINT(vformat("Buffer has no field named \"%s\"", field));
-        return;
-    }
-    
-
+void FSLIndexBuffer::set_index_count(uint32_t num_indices) {
+    _update_index_count(num_indices);
 }
 
-void FSLIndexBuffer::set_buffer(TypedDictionary<StringName, Variant> values) {
-    HashSet<StringName> fields_set = {};
-    HashMap<StringName, PackedByteArray> data;
-    for (const auto& field_name : values.keys()) {
-        if (!buffer_info.fields.has(field_name)) {
-            ERR_PRINT(vformat("Buffer has no field named \"%s\"", field_name));
-            return;
-        }
-        data[field_name] = (fsl_type_to_bytes(buffer_info.fields[field_name].type, values[field_name]));
-        set_field(field_name, values[field_name]);
-        fields_set.insert(field_name);
-    }
-    for (const auto& [field_name, _] : buffer_info.fields) {
-        if (!fields_set.has(field_name)) {
-            ERR_PRINT(vformat("No value provided for field \"%s\", default value used", field_name));
-            ERR_PRINT_ONCE(vformat("To only set the provided fields, use update_buffer"));
-
-        }
-    }
-}
-
-void FSLIndexBuffer::update_buffer(TypedDictionary<StringName, Variant> values) {
-    for (const auto& field_name : values.keys()) {
-        set_field(field_name, values[field_name]);
+void FSLIndexBuffer::set_index_format(RenderingDevice::IndexBufferFormat new_format) {
+    if (index_format != new_format) {
+        index_format = new_format;
+        _rebuild();
     }
 }
 
 Ref<RDUniform> FSLIndexBuffer::get_rd_uniform(uint32_t binding, bool &needs_rebuild) {
-    needs_rebuild |= rebuilt;
+	needs_rebuild |= rebuilt;
     rebuilt = false;
     rduniform->set_binding(binding);
 	return rduniform;

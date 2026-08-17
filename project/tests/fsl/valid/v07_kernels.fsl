@@ -8,10 +8,10 @@
 #define GROUP 8
 
 layout(std430) buffer kBuf {
-    float[] k_out;
+    f32[] k_out;
 };
 
-shared float[GROUP * GROUP] wg_scratch;
+shared f32[GROUP * GROUP] wg_scratch;
 
 kernel[GROUP, GROUP, 1] allBuiltins(
         g : GlobalInvocationID,
@@ -20,13 +20,13 @@ kernel[GROUP, GROUP, 1] allBuiltins(
         wg : WorkGroupID,
         wgs : WorkGroupSize,
         nwg : NumWorkGroups) {
-    k_out[g.x] = float(l.x + li + wg.y + wgs.z + nwg.x);
+    k_out[g.x] = f32(l.x + li + wg.y + wgs.z + nwg.x);
 }
 
-kernel[64, 1, 1] pushHeavy(uint count, g : GlobalInvocationID, float a, float b,
-                           int mode, l : LocalInvocationID, uint2 span, float4 tint) {
+kernel[64, 1, 1] pushHeavy(u32 count, g : GlobalInvocationID, f32 a, f32 b,
+                           i32 mode, l : LocalInvocationID, u32x2 span, f32x4 tint) {
     if (g.x >= count) return;
-    k_out[g.x] = a * b + float(mode) + float(span.x + span.y) + tint.w + float(l.x);
+    k_out[g.x] = a * b + f32(mode) + f32(span.x + span.y) + tint.w + f32(l.x);
 }
 
 kernel[1, 1, 1] minimal() {
@@ -34,11 +34,11 @@ kernel[1, 1, 1] minimal() {
 }
 
 kernel[GROUP, GROUP, 1] sharedUser1(li : LocalInvocationIndex) {
-    wg_scratch[li] = float(li);
+    wg_scratch[li] = f32(li);
 }
 
 kernel[GROUP, GROUP, 1] sharedUser2(li : LocalInvocationIndex) {
-    wg_scratch[li] = float(li) * 2.0;
+    wg_scratch[li] = f32(li) * 2.0;
     barrier();
-    k_out[li] = wg_scratch[(li + 1u) % uint(GROUP * GROUP)];
+    k_out[li] = wg_scratch[(li + 1u) % u32(GROUP * GROUP)];
 }

@@ -4,15 +4,15 @@
 // rejected instead, that is still a correct validation error for this file.)
 
 layout(std430) buffer sinkBuf {
-    float[] sink;
+    f32[] sink;
 };
 
-float ping(float n) {
+f32 ping(f32 n) {
     if (n <= 0.0) return 0.0;
     return pong(n - 1.0);
 }
 
-float pong(float n) {
+f32 pong(f32 n) {
     if (n <= 0.0) return 1.0;
     return ping(n - 1.0);
 }

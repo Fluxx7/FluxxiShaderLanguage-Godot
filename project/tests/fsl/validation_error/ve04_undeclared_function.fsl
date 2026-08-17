@@ -2,7 +2,7 @@
 // Calls a function that is neither declared nor a builtin.
 
 layout(std430) buffer sinkBuf {
-    float[] sink;
+    f32[] sink;
 };
 
 kernel[1, 1, 1] undeclaredFunc() {

@@ -7,25 +7,25 @@
 // deliberately out of scope.)
 
 layout(std430) buffer loopBuf {
-    uint[] loop_out;
+    u32[] loop_out;
 };
 
 kernel[32, 1, 1] loopControl(id : GlobalInvocationID) {
-    uint acc = 0u;
-    for (uint i = 0u; i < 64u; i++) {
+    u32 acc = 0u;
+    for (u32 i = 0u; i < 64u; i++) {
         if (i % 2u == 0u) continue;
         if (i > 32u) break;
         acc += i;
     }
 
     // infinite for with break as the only exit
-    uint guard = 0u;
+    u32 guard = 0u;
     for (;;) {
         guard++;
         if (guard > 8u) break;
     }
 
-    uint n = acc + id.x + 1u;
+    u32 n = acc + id.x + 1u;
     while (n > 1u) {
         n = (n % 2u == 0u) ? n / 2u : 3u * n + 1u;
         acc++;

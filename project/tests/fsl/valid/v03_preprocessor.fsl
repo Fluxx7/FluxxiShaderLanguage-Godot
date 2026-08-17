@@ -26,9 +26,9 @@
 #endif
 
 #ifdef FEATURE_B
-const float branch_val = this_branch_is_disabled_and_never_parsed;
+const f32 branch_val = this_branch_is_disabled_and_never_parsed;
 #else
-const float branch_val = 2.0;
+const f32 branch_val = 2.0;
 #endif
 
 #define LIMIT 4
@@ -36,17 +36,17 @@ const float branch_val = 2.0;
 #define LIMIT 16
 
 layout(std430) buffer macroBuf {
-    float[TILE * TILE] scratch;
-    float[] rest;
+    f32[TILE * TILE] scratch;
+    f32[] rest;
 };
 
-shared float[DOUBLE(TILE)] cache;
+shared f32[DOUBLE(TILE)] cache;
 
 kernel[TILE, TILE, 1] macroKernel(id : GlobalInvocationID, l : LocalInvocationID) {
-    float v = COMPOSE(float(id.x));
-    v += LONG_EXPR(v, branch_val) * float(MODE) + float(LIMIT);
-    v += quad(branch_val) + cmul(float2(v, 1.0), float2(1.0, v)).x;
+    f32 v = COMPOSE(f32(id.x));
+    v += LONG_EXPR(v, branch_val) * f32(MODE) + f32(LIMIT);
+    v += quad(branch_val) + cmul(f32x2(v, 1.0), f32x2(1.0, v)).x;
     cache[l.x] = v;
-    scratch[l.y * uint(TILE) + l.x] = cache[l.x];
-    rest[id.x + id.y * uint(TILE)] = v;
+    scratch[l.y * u32(TILE) + l.x] = cache[l.x];
+    rest[id.x + id.y * u32(TILE)] = v;
 }

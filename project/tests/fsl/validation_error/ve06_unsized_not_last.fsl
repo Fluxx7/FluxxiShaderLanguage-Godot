@@ -2,8 +2,8 @@
 // Unsized array must be the last member of a buffer block.
 
 layout(std430) buffer badLayout {
-    float[] tail_first;
-    float after;
+    f32[] tail_first;
+    f32 after;
 };
 
 kernel[1, 1, 1] unsizedNotLast() {

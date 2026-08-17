@@ -2,4 +2,4 @@
 // Function-macro argument list cut off by the end of the line.
 
 #define BROKEN(a,
-const float x = 1.0;
+const f32 x = 1.0;

@@ -1,0 +1,43 @@
+# Republishes the distributable addon to the `addon-dist` branch whenever the
+# addon directory changes on main.
+#
+# `addon-dist` is a subtree split of project/addons/fluxxishaderlang, so its
+# root IS the addon: the .gdextension, the C# bindings and the prebuilt
+# binaries, without the C++ source or the godot-cpp checkout. Downstream
+# projects vendor it with `git subtree add/pull`.
+
+name: Publish addon-dist branch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "project/addons/fluxxishaderlang/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-addon-dist
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # subtree split walks the full history of the prefix
+          fetch-depth: 0
+          submodules: false
+
+      - name: Split addon into addon-dist
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git subtree split --prefix=project/addons/fluxxishaderlang -b addon-dist
+
+      - name: Push addon-dist
+        run: git push -f origin addon-dist

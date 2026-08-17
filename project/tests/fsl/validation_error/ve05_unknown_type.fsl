@@ -3,7 +3,8 @@
 // identifiers to the parser); the validator must reject the unknown type.
 
 layout(std430) buffer sinkBuf {
-    float[] sink;
+    f32[] sink;
+    fink mink;
 };
 
 kernel[1, 1, 1] unknownType() {

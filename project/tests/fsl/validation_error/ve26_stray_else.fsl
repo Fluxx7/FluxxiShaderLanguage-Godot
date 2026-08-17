@@ -4,6 +4,6 @@
 // follow an if.
 
 kernel[1, 1, 1] strayElse() {
-    float x = 1.0;
+    f32 x = 1.0;
     else { x = 2.0; }
 }

@@ -3,10 +3,10 @@
 // Placement is validated semantically, not grammatically.
 
 layout(std430) buffer sinkBuf {
-    float[] sink;
+    f32[] sink;
 };
 
-float helper(float x) : specialization_constant {
+f32 helper(f32 x) : specialization_constant {
     return x * 2.0;
 }
 

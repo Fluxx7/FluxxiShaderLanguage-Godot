@@ -2,11 +2,11 @@
 // Unsized arrays are only legal as the last buffer member, not as locals.
 
 layout(std430) buffer sinkBuf {
-    float[] sink;
+    f32[] sink;
 };
 
 kernel[1, 1, 1] unsizedLocal() {
-    float[] xs;
+    f32[] xs;
     xs[0] = 1.0;
     sink[0] = xs[0];
 }

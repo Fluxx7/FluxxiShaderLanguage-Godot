@@ -1,4 +1,5 @@
 #include "code_builder.h"
+#include "godot_fsl_defs.h"
 
 using namespace AST;
 
@@ -18,36 +19,50 @@ void insert_all_excluding(HashSet<T>& dest, const HashSet<T>& source, const Hash
     }
 }
 
-FSLType typeref_to_fslType(const TypeRef &type_ref) {
-    FSLPrimitive primitive_type = FLOAT;
-    FSLVecSize vec_size = ONE;
+FSLType CodeBuilder::typeref_to_fslType(const TypeRef &type_ref, BufferFormat format) {
+    const auto& type_name = type_ref.type;
+    FSLBaseType base_type;
+    if (structs.has(type_name)) {
+        base_type = structs[type_name];
+    } else {
+        FSLPrimitive primitive_type = rip_primitive_from_string(type_name);
+        uint32_t type_name_len = primitive_name_length(primitive_type);
+        FSLVecSize vec_size = ONE;
+        FSLVecSize mat_size = ONE;
+        String remainder = type_name.substr(type_name_len);
+        if (remainder.length() > 1) {
+            if (remainder[0] == 'x' && remainder.substr(1,1).is_valid_int()) {
+                int64_t token_val = remainder.substr(1,1).to_int();
+                if (token_val > 4 || token_val < 1) {
+                    printvf("Invalid vector size %d", token_val);
+                }
+                vec_size = (FSLVecSize) token_val;
+            }
+            if (remainder.length() > 3) {
+                if (remainder[2] == 'x' && remainder.substr(3,1).is_valid_int()) {
+                    int64_t token_val = remainder.substr(3,1).to_int();
+                    if (token_val > 4 || token_val < 1) {
+                        printvf("Invalid matrix size %d", token_val);
+                    }
+                    mat_size = (FSLVecSize) token_val;
+                }
+            }
+        }
+        
+        base_type = FSLCoreType{primitive_type, vec_size, mat_size};
+    }
+    
     LocalVector<uint32_t> array_dims;
-    const auto& type_token = type_ref.type;
-    uint32_t type_index = 0;
-    for (auto val : fsl_primitives) {
-        if (type_token->contents == val) {
-            primitive_type = (FSLPrimitive) type_index;
-        } else {
-            type_index++;
-        }
-    }
-    uint32_t final_char_index = type_token->contents.length() - 1;
-    String final_char = type_token->contents.substr(final_char_index);
-    if (final_char.is_valid_int()) {
-        uint32_t token_val = final_char.to_int();
-        if (token_val > 4 || token_val == 0) {
-            printvf("Invalid vector size %d", token_val);
-        }
-        vec_size = (FSLVecSize) token_val;
-    }
+    
+    
     for(const auto& array_dim : type_ref.array_dims) {
         // TODO: handle this properly, this is not a safe set-up at all lmao
         array_dims.push_back(0);
     }
     if (array_dims.size() > 0) {
-        return (FSLArray) {(FSLCoreType){primitive_type, vec_size}, array_dims};
+        return FSLArray{base_type, array_dims};
     }
-    return (FSLCoreType){primitive_type, vec_size};
+    return base_type;
 }
 
 CodeBuilder::CodeInfo CodeBuilder::gen_var_decl(const VariableDecl& var_decl) {
@@ -75,9 +90,9 @@ CodeBuilder::CodeInfo CodeBuilder::gen_var_decl(const VariableDecl& var_decl) {
     }
     
     for (const auto& specifier : var_decl.type.specifiers) {
-        var_decl_code.add("%s ", specifier->contents);
+        var_decl_code.add("%s ", specifier_to_string(specifier));
     }
-    var_decl_code.add("%s %s", to_original_type(var_decl.type.type->contents), var_decl.name);
+    var_decl_code.add("%s %s", to_original_type(var_decl.type.type), var_decl.name);
     for (const auto& array_dim : var_decl.type.array_dims) {
         var_decl_code.add("[");
         if (!array_dim.operations.is_empty()) {
@@ -132,7 +147,13 @@ CodeBuilder::CodeInfo CodeBuilder::gen_operation(const Operation &operation, boo
                 insert_all(operation_vars, decls);
             }
             operation_code.add(")");
-            insert_all(operation_refs, func_infos[func_call.name].refs);
+            // dodging around built-in calls for now, in the future these should be in func_infos by default like how valid_types is populated in fsl_validator
+            if (func_infos.has(func_call.name)) {
+                for (const auto& func_def : func_infos[func_call.name]) {
+                    insert_all(operation_refs, func_def.refs);
+                }
+                operation_refs.insert(func_call.name);
+            }
             last_op_spec = false;
         },
         [&](VariableRef var_ref) {
@@ -178,7 +199,7 @@ CodeBuilder::CodeInfo CodeBuilder::gen_operation(const Operation &operation, boo
             last_op_spec = false;
         },
         [&](UnknownOp error_op) {
-            print_error(vformat("Error found in AST, code: %s", tokens_to_string(error_op.code)));
+            print_error(vformat("Error found in AST, code: %s", error_op.code));
             last_op_spec = false;
         });
     return {operation_code, operation_refs, operation_vars};
@@ -282,6 +303,28 @@ CodeBuilder::CodeInfo CodeBuilder::gen_expression(const Expression &expression) 
                 insert_all_excluding(expr_refs, refs, for_decls);
             }
         },
+        [&](WhileNode while_node) {
+            expr_code.add("while (");
+            HashSet<StringName> while_decls;
+            {
+                auto [code, refs, decls] = gen_operation_list(while_node.cond);
+                expr_code.add(code);
+                insert_all(expr_refs, refs);
+                while_decls = std::move(decls);
+            }
+            expr_code.add(") ");
+            {
+                CodeBuilder::CodeInfo info;
+                if (while_node.is_scoped) {
+                    info = gen_expression(while_node.body);
+                } else {
+                    info = gen_expression(while_node.body.body[0]);
+                }
+                auto& [code, refs, _] = info;
+                expr_code.add_line(code);
+                insert_all_excluding(expr_refs, refs, while_decls);
+            }
+        },
         [&](ScopeNode subblock) {
             expr_code.add_line("{");
             expr_code.indent();
@@ -294,10 +337,16 @@ CodeBuilder::CodeInfo CodeBuilder::gen_expression(const Expression &expression) 
             expr_code.add("}");
         },
         [&](FunctionDecl func_decl) {
-            for (const auto& specifier : func_decl.return_type.specifiers) {
-                expr_code.add("%s ", specifier->contents);
+            if (func_decl.return_type.has_value()) {
+                auto& return_type = *func_decl.return_type;
+                for (const auto& specifier : return_type.specifiers) {
+                    expr_code.add("%s ", specifier_to_string(specifier));
+                }
+                expr_code.add("%s %s(", to_original_type(return_type.type), func_decl.name);
+            } else {
+                expr_code.add("void %s(", func_decl.name);
             }
-            expr_code.add("%s %s(", to_original_type(func_decl.return_type.type->contents), func_decl.name);
+            
             bool is_first_arg = true;
             HashSet<StringName> arg_names;
             for (const auto& arg_decl : func_decl.args) {
@@ -309,12 +358,32 @@ CodeBuilder::CodeInfo CodeBuilder::gen_expression(const Expression &expression) 
                 auto [code, refs, _] = gen_var_decl(arg_decl);
                 expr_code.add("%s", code.get_output());
                 arg_names.insert(arg_decl.name);
+                insert_all(expr_refs, refs);
             }
             expr_code.add_line(") ");
             auto [code, refs, _] = gen_expression(func_decl.code);
             expr_code.add_line(code);
             insert_all_excluding(expr_refs, refs, arg_names);
-            func_infos[func_decl.name] = {expr_code, expr_refs};
+            func_infos[func_decl.name].push_back({expr_code, expr_refs});
+            expr_code = ConsoleString();
+        },
+        [&](StructDecl struct_decl) {
+            HashMap<StringName, FSLType> struct_fields;
+            // HashMap<StringName, FSLField> struct_fields_std140;
+            expr_code.add("struct %s {", struct_decl.name);
+            expr_code.indent();
+            
+            for (const auto& field : struct_decl.fields) {
+                auto [code, refs, _] = gen_var_decl(field);
+                auto field_type = typeref_to_fslType(field.type, STD430);
+                struct_fields[field.name] = field_type;
+                expr_code.add(code);
+                expr_code.add_line(";");
+                insert_all(expr_refs, refs);
+            }
+            expr_code.unindent();
+            expr_code.add_line("};");
+            structs[struct_decl.name] = FSLStruct{struct_decl.name, struct_fields};
         },
         [&](ReturnExpression ret_expr) {
             expr_code.add("return");
@@ -348,7 +417,7 @@ KernelDef CodeBuilder::gen_kernel(const KernelNode &kernel) {
     ConsoleString y_threads = gen_operation_list(kernel.local_y_threads).code;
     ConsoleString z_threads = gen_operation_list(kernel.local_z_threads).code;
     kernel_code.add("layout(local_size_x");
-#ifdef SPECIALIZATION_CONSTANTS_WORKGROUPS_USEABLE
+#ifdef SPECIALIZATION_CONSTANTS_WORKGROUPS_USABLE
     if (spec_constants.has(x_threads.get_output())) {
         auto spec_constant = spec_constants[x_threads.get_output()];
         kernel_code.add("_id = %d, local_size_x = %d, ", spec_constant.constant_id, spec_constant.value);
@@ -424,7 +493,7 @@ KernelDef CodeBuilder::gen_kernel(const KernelNode &kernel) {
             auto var_info = gen_var_decl(push_constant);
             kernel_code.add(var_info.code);
             VariableInfo pc_info;
-            pc_info.type = typeref_to_fslType(push_constant.type);
+            pc_info.type = typeref_to_fslType(push_constant.type, STD430);
             kernel_code.add_line(";");
             kernel_info.push_constants[push_constant.name] = pc_info;
             local_identifiers.insert(push_constant.name);
@@ -443,23 +512,32 @@ KernelDef CodeBuilder::gen_kernel(const KernelNode &kernel) {
     kernel_code.add(code);
     kernel_code.unindent();
     kernel_code.add_line("}");
-    ConsoleString resources_code;
+    ConsoleString globals_code;
     uint32_t next_binding = 0;
     uint32_t set = 0;
-    resources_code.add(string_builder);
+    globals_code.add(string_builder);
+    HashSet<StringName> bound_globals;
     for (auto &ref_name : refs) {
         if (!local_identifiers.has(ref_name) && !global_vars.has(ref_name)) {
-            if (resources.has(ref_name)) {
+            if (resources.has(ref_name) && !bound_globals.has(resources[ref_name].name)) {
                 auto [resource_info, resource_code] = gen_resource(resources[ref_name], set, next_binding++);
                 kernel_info.bindings[resources[ref_name].name] = resource_info;
-                resources_code.add(resource_code);
+                globals_code.add(resource_code);
+                bound_globals.insert(resources[ref_name].name);
+            } else if (func_infos.has(ref_name) && !bound_globals.has(ref_name)) {
+                for (const auto& func_def : func_infos[ref_name]) {
+                    globals_code.add(func_def.code);
+                }
+                bound_globals.insert(ref_name);
             }
         } 
     }
-    resources_code.add(std::move(kernel_code));
+    globals_code.add(std::move(kernel_code));
     kernel_info.specialization_constants = spec_constants;
-    return {kernel_info, resources_code.get_output()};
+    return {kernel_info, globals_code.get_output()};
 }
+
+
 
 Pair<BufferInfo, String> CodeBuilder::gen_buffer(const String &buffer_name, const BufferDef &buffer) {
 	BufferInfo buf_info;
@@ -470,14 +548,30 @@ Pair<BufferInfo, String> CodeBuilder::gen_buffer(const String &buffer_name, cons
     String buffer_layout = buffer.layout == STD140 ? "std140" : "std430";
     res_code += vformat("%s) %s restrict %s {\n", buffer_layout, buffer_type, buffer_name);
     uint32_t curr_offset = 0;
+    for (const auto& [name, args] : buffer.annotations) {
+        switch (is_valid_buffer_annotation(name)) {
+            case 1:
+                buf_info.specialization = BufferInfo::GODOT_VERTEX;
+                break;
+            case 2:
+                buf_info.specialization = BufferInfo::GODOT_INDEX;
+                break;
+            case 3:
+                buf_info.usage_flags.push_back(RenderingDevice::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT);
+                break;
+            default:
+                // shouldn't happen
+                break;
+        }
+    }
     for (auto field : buffer.fields) {
         BufferFieldInfo field_info;
         String type_string = "";
         String postname_string = "";
-        for (const auto &token : field.type.specifiers) {
-            type_string += token->contents;
+        for (const auto &specifier : field.type.specifiers) {
+            type_string += vformat("%s ", specifier_to_string(specifier));
         }
-        type_string += to_original_type(field.type.type->contents);
+        type_string += to_original_type(field.type.type);
         for (const auto &array_dim : field.type.array_dims) {
             postname_string += "[";
             if (!array_dim.operations.is_empty()) {
@@ -485,17 +579,16 @@ Pair<BufferInfo, String> CodeBuilder::gen_buffer(const String &buffer_name, cons
             }
             postname_string += "]";
         }
-        field_info.type = typeref_to_fslType(field.type);
+        auto field_type = typeref_to_fslType(field.type, buffer.layout);
+        field_info.type = field_type;
         if (const FSLArray* fsl_array = get_if<FSLArray>(&field_info.type)) {
             for (const auto& dimension : fsl_array->dimensions) {
                 if (dimension == 0) {
-                    buf_info.has_unsized_field = true;
+                    buf_info.tail_stride = get_fsl_type_layout(field_type, 0, buffer.layout).stride;
                 }
                 field_info.dimensions.push_back(dimension);
             }
         }
-        field_info.offset = curr_offset;
-        curr_offset += get_fsl_type_alignment(field_info.type, 1, buffer.layout);
 
         buf_info.fields[field.name] = field_info;
         res_code += vformat("\t%s %s%s;\n", type_string, field.name, postname_string);
@@ -524,15 +617,17 @@ Pair<ResourceInfo, String> CodeBuilder::gen_resource(const ResourceNode &resourc
             resource_code += res_code;
             res_info.type_info = tex_info;
         },
-        [&](const VariableDecl &uniform)  {
+        [&](const UniformDef &uniform)  {
             VariableInfo var_info;
+            var_info.type = typeref_to_fslType(uniform.uniform_decl.type, STD430);
             res_info.type_info = var_info;
+            resource_code += vformat(") uniform %s;", gen_var_decl(uniform.uniform_decl).code.get_output());
         });
     return {res_info, resource_code};
 }
 
 CodeBuilder::CodeBuilder(const fslAST &ast) {
-    string_builder.add_line("#version 450\n");
+    string_builder.add_line("#version 450\n#extension GL_EXT_shader_explicit_arithmetic_types : require");
     // collect resources first so that declaration order doesn't matter
     for (const GlobalDeclaration &decl : ast.contents) {
         if (const ResourceNode* p_resource = get_if<ResourceNode>(&decl.value)) {
@@ -546,7 +641,7 @@ CodeBuilder::CodeBuilder(const fslAST &ast) {
                     }
                 },
                 [&](const TextureDef &texture) { },
-                [&](const VariableDecl &uniform)  {});
+                [&](const UniformDef &uniform)  {});
         }
     }
 

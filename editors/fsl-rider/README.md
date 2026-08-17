@@ -11,14 +11,14 @@ single source of truth and is copied into the plugin at build time.
 ./gradlew buildPlugin
 ```
 
-The installable plugin lands in `build/distributions/fsl-rider-0.1.0.zip`.
+The installable plugin lands in `build/distributions/fsl-rider-0.2.1.zip`.
 
 The first build downloads the IntelliJ Platform SDK (~1 GB), so it takes a while.
 
 ## Install in Rider
 
 1. **Settings → Plugins → ⚙ → Install Plugin from Disk…**
-2. Pick `build/distributions/fsl-rider-0.1.0.zip`
+2. Pick `build/distributions/fsl-rider-0.2.1.zip`
 3. Restart the IDE. `.fsl` files are now highlighted.
 
 ## Zero-build alternative

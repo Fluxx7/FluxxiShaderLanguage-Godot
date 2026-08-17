@@ -2,7 +2,7 @@
 // Two kernels with the same name.
 
 layout(std430) buffer sinkBuf {
-    float[] sink;
+    f32[] sink;
 };
 
 kernel[8, 1, 1] sameName(g : GlobalInvocationID) {

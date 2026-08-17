@@ -83,15 +83,19 @@ RID FSLUniformSet::get_rid(RID shader_rid, uint32_t set_index) {
     bool rebuild_set = rebuild || !rd->uniform_set_is_valid(uniform_set_id);
     TypedArray<Ref<RDUniform>> set_uniforms;
 
-    for (auto &[binding, resource] : uniforms) {
-       set_uniforms.append(resource->get_rd_uniform(binding, rebuild_set));
+    if (!uniforms.is_empty()) {
+        for (auto &[binding, resource] : uniforms) {
+            set_uniforms.append(resource->get_rd_uniform(binding, rebuild_set));
+        }
     }
 
     if (rebuild_set) {
         if (rd->uniform_set_is_valid(uniform_set_id) && uniform_set_id.is_valid()) {
             rd->free_rid(uniform_set_id);
         }
-        uniform_set_id = rd->uniform_set_create(set_uniforms, shader_rid, set_index);
+        if (!uniforms.is_empty()) {
+            uniform_set_id = rd->uniform_set_create(set_uniforms, shader_rid, set_index);
+        }
         rebuild = false;
     }
     return uniform_set_id;

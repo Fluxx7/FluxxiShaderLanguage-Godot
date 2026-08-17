@@ -3,4 +3,4 @@
 
 #define SOMETHING
 #ifdef SOMETHING
-const float x = 1.0;
+const f32 x = 1.0;

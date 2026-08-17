@@ -2,11 +2,11 @@
 // Two resources declared with the same block name.
 
 layout(std430) buffer clashing {
-    float[] a;
+    f32[] a;
 };
 
 layout(std430) buffer clashing {
-    uint[] b;
+    u32[] b;
 };
 
 kernel[1, 1, 1] duplicateResource() {

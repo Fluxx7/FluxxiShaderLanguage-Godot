@@ -5,16 +5,16 @@
 #else
 #define MATH_COMMON_INCLUDED
 
-const float PI = 3.14159265358979;
+const f32 PI = 3.14159265358979;
 
 #define HALF(x) ((x) * 0.5)
 
-float sqr(float x) {
+f32 sqr(f32 x) {
     return x * x;
 }
 
-float2 cmul(float2 a, float2 b) {
-    return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+f32x2 cmul(f32x2 a, f32x2 b) {
+    return f32x2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
 }
 
 #endif

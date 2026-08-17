@@ -62,15 +62,21 @@ struct Token {
         
         KEYWORD_KERNEL,
         KEYWORD_LAYOUT,
+
         KEYWORD_IF,
         KEYWORD_ELSE,
         KEYWORD_FOR,
         KEYWORD_WHILE,
+        KEYWORD_DO,
+        KEYWORD_SWITCH,
+
         KEYWORD_UNIFORM,
         KEYWORD_BUFFER,
         KEYWORD_RETURN,
         KEYWORD_CONTINUE,
         KEYWORD_BREAK,
+        KEYWORD_STRUCT,
+        KEYWORD_VOID,
         
 
         // OPAQUE TYPES
@@ -80,8 +86,6 @@ struct Token {
         // USEFUL CATEGORIES
         TEXFORMAT_RGBA16F,
         TEXFORMAT_RGBA32F,
-        BUFFORMAT_VERTEX,
-        BUFFORMAT_INDEX,
         BUFFORMAT_STD140,
         BUFFORMAT_STD430,
 
@@ -258,6 +262,10 @@ public:
             streams.pop();
         }
         streams.top().reset();
+    }
+
+    const TokenDebugInfo& get_last_debug_info() {
+        return last_debug_info;
     }
 
     const TokenTree& peek() const;

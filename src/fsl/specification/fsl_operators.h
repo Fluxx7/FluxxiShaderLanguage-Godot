@@ -2,80 +2,83 @@
 #include "godot_imports.h"
 #include "std_imports.h"
 
-enum FSLOperatorType {
+
+namespace FSL {
+
+enum OperatorType {
     OP_INVERT,
     OP_BITAND,
     OP_BITOR,
     OP_XOR,
+    OP_RSHIFT,
+    OP_LSHIFT,
 
     OP_NOT,
     OP_LOGAND,
     OP_LOGOR,
+    OP_LOGXOR,
     OP_LESSTHAN,
     OP_LESSEQUAL, 
     OP_EQUAL,
-    OP_EQUALGREATER, 
+    OP_GREATEREQUAL, 
     OP_GREATERTHAN, 
     OP_NOTEQUAL,
 
+    OP_ADD,
+    OP_SUBTRACT,
     OP_MULTIPLY,
     OP_DIVIDE,
-    OP_SUBTRACT,
-    OP_ADD,
 
     OP_TERNARY_SEPARATOR,
     OP_TERNARY_QUERY,
     OP_MODULO,
 
+    OP_INCREMENT,
+    OP_DECREMENT,
     OP_ASSIGN,
-    OP_MAX
+    OP_BITANDASSIGN,
+    OP_BITORASSIGN,
+    OP_XORASSIGN,
+    OP_RSHIFTASSIGN,
+    OP_LSHIFTASSIGN,
+    OP_ADDASSIGN,
+    OP_SUBTRACTASSIGN,
+    OP_MULTIPLYASSIGN,
+    OP_DIVIDEASSIGN,
+    OP_MODULOASSIGN,
+    OP_ERR
 };
 
-enum FSLOperatorOperandCount {
-    OPCOUNT_UNARY,
-    OPCOUNT_BINARY,
-    OPCOUNT_MAX
+enum OperatorPriority : uint32_t {
+    OPPRIO_NONE = 0,     // sentinel
+    OPPRIO_ASSIGN,
+    OPPRIO_TERNARY,      
+    OPPRIO_LOGOR,        
+    OPPRIO_LOGXOR,       
+    OPPRIO_LOGAND,       
+    OPPRIO_BITOR,        
+    OPPRIO_BITXOR,       
+    OPPRIO_BITAND,       
+    OPPRIO_EQUALITY,     
+    OPPRIO_RELATIONAL,   
+    OPPRIO_SHIFT,        
+    OPPRIO_ADDSUB,       
+    OPPRIO_MULDIV,       
+    OPPRIO_UNARY, 
+    OPPRIO_POSTFIX,
+    OPPRIO_COUNT
 };
 
-struct FSLOperator {
-    FSLOperatorType type;
-    FSLOperatorOperandCount op_count;
-    bool is_const = false;
+
+struct Operator {
+    OperatorType type = OP_ERR;
+    OperatorPriority priority = OPPRIO_NONE;
+    bool right_assoc = false;
+    bool is_pure = false;
 };
 
-const FSLOperator* string_to_fsl_op(const String& op_string) {
-    static const FSLOperator err_sentinel = {OP_MAX, OPCOUNT_MAX, false};
-    static const FSLOperator fsl_operators[] = {
-        {OP_INVERT, OPCOUNT_UNARY, true},
-        {OP_BITAND, OPCOUNT_BINARY, true},
-        {OP_BITOR, OPCOUNT_BINARY, true},
-        {OP_XOR, OPCOUNT_BINARY, true},
+const Operator* string_to_unary_op(const String& op_string);
 
-        {OP_NOT, OPCOUNT_UNARY, true},
-        {OP_LOGAND, OPCOUNT_BINARY, true},
-        {OP_LOGOR, OPCOUNT_BINARY, true},
-        {OP_LESSTHAN, OPCOUNT_BINARY, true},
-        {OP_LESSEQUAL, OPCOUNT_BINARY, true},
-        {OP_EQUAL, OPCOUNT_BINARY, true},
-        {OP_EQUALGREATER, OPCOUNT_BINARY, true},
-        {OP_GREATERTHAN, OPCOUNT_BINARY, true},
-        {OP_NOTEQUAL, OPCOUNT_BINARY, true},
+const Operator* string_to_binary_op(const String& op_string);
 
-        {OP_ADD, OPCOUNT_BINARY, true},
-        {OP_SUBTRACT, OPCOUNT_BINARY, true},
-        {OP_MULTIPLY, OPCOUNT_BINARY, true},
-        {OP_DIVIDE, OPCOUNT_BINARY, true},
-
-        {OP_TERNARY_SEPARATOR, OPCOUNT_BINARY, true},
-        {OP_TERNARY_QUERY, OPCOUNT_BINARY, true},
-        {OP_MODULO, OPCOUNT_BINARY, true},
-
-        {OP_ASSIGN, OPCOUNT_BINARY, true},
-    };
-    if (op_string.is_empty()) {
-        return &err_sentinel;
-    }
-    switch (op_string[0]) {
-
-    }
 }

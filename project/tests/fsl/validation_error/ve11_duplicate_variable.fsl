@@ -2,11 +2,11 @@
 // Same variable name declared twice in the same scope.
 
 layout(std430) buffer sinkBuf {
-    float[] sink;
+    f32[] sink;
 };
 
 kernel[1, 1, 1] duplicateVar() {
-    float x = 1.0;
-    float x = 2.0;
+    f32 x = 1.0;
+    f32 x = 2.0;
     sink[0] = x;
 }

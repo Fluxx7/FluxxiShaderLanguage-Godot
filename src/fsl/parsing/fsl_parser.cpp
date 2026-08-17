@@ -4,40 +4,6 @@
 #include "fsl_resource.h"
 using namespace AST;
 
-int32_t is_type(String identifier) {
-    static const char *types[] = {
-        "float",
-        "int",
-        "uint",
-        "double",
-        "bool",
-        "float2",
-        "float3",
-        "float4",
-        "int2",
-        "int3",
-        "int4",
-        "uint2",
-        "uint3",
-        "uint4",
-        "double2",
-        "double3",
-        "double4",
-        "bool2",
-        "bool3",
-        "bool4"
-    }; 
-    
-    int32_t curr_index = 0;
-    for (auto type_name : types) {
-        if (identifier == type_name) {
-            return curr_index;
-        }
-        curr_index++;
-    }
-    return -1;
-}
-
 TextureFormat token_to_tex_format(const Token* token) {
     switch (token->token_type) {
         case Token::TEXFORMAT_RGBA16F: return RGBA16F;
@@ -58,8 +24,6 @@ BufferFormat token_to_buf_format(const Token* token) {
     switch (token->token_type) {
         case Token::BUFFORMAT_STD140: return STD140;
         case Token::BUFFORMAT_STD430: return STD430;
-        case Token::BUFFORMAT_VERTEX: return VERTEX;
-        case Token::BUFFORMAT_INDEX: return INDEX;
         default: return STD140; // it should not be possible to reach here, but I don't know how to guarantee it
     }
 }
@@ -75,17 +39,42 @@ optional<Ref<FileAccess>> load_file(String &path) {
 
 TypeRef FSLParser::_parse_type(TokenStream& stream) {
     TypeRef new_type;
+    new_type.debug_info.file_name = stream.peek().get_debug_info().source_file;
+    new_type.debug_info.start_row = stream.peek().get_debug_info().row;
+    new_type.debug_info.start_column = stream.peek().get_debug_info().column;
     while (stream.peek().get_category() == Token::CATEGORY_SPECIFIER) {
-        new_type.specifiers.push_back(stream.consume().get_token());
+        switch (stream.consume().get_type()) {
+            case Token::SPECIFIER_IN:
+                new_type.specifiers.push_back(SPECIFIER_IN);
+                break;
+            case Token::SPECIFIER_OUT:
+                new_type.specifiers.push_back(SPECIFIER_OUT);
+                break;
+            case Token::SPECIFIER_INOUT:
+                new_type.specifiers.push_back(SPECIFIER_INOUT);
+                break;
+            case Token::SPECIFIER_CONST:
+                new_type.specifiers.push_back(SPECIFIER_CONST);
+                break;
+            case Token::SPECIFIER_SHARED:
+                new_type.specifiers.push_back(SPECIFIER_SHARED);
+                break;
+            default:
+                break;
+        }
+        
     } 
     auto& type_name = stream.peek();
     if (!stream.expect(Token::IDENTIFIER)) {
-        print_fsl_err_expected_tok("type name", type_name);
+        log_expected_tok_err("type name", type_name);
     }
-    new_type.type = type_name.get_token();
+    new_type.type = type_name.get_contents();
     while (stream.descend_bracket(false) == true) {
         new_type.array_dims.push_back(_parse_operation(stream.clip_and_ascend()));
     }
+    const auto& last_debug_info = stream.get_last_debug_info();
+    new_type.debug_info.end_row = last_debug_info.row;
+    new_type.debug_info.end_column = last_debug_info.column + last_debug_info.length;
 	return new_type;
 }
 
@@ -93,32 +82,53 @@ TypeRef FSLParser::_parse_type(TokenStream& stream) {
 
 VariableDecl FSLParser::_parse_var_decl(TokenStream &&stream) {
     VariableDecl new_var;
+    new_var.debug_info.file_name = stream.peek().get_debug_info().source_file;
+    new_var.debug_info.start_row = stream.peek().get_debug_info().row;
+    new_var.debug_info.start_column = stream.peek().get_debug_info().column;
+
     new_var.type = _parse_type(stream);
     auto& name_tok = stream.peek();
     if (!stream.expect(Token::IDENTIFIER)) {
-        print_fsl_err_expected_tok_loc("valid identifier", "in variable declaration", name_tok);
+        if (stream.at_end()) {
+            auto debug_info = name_tok.get_debug_info();
+            debug_info.column += debug_info.length;
+            debug_info.length = 1;
+            log_parser_err("Missing identifier in variable declaration", debug_info, FSLError::ERR_TOKEN_EXPECTED);
+            new_var.is_valid = false;
+            return new_var;
+        }
+        log_expected_tok_err_loc("valid identifier", "in variable declaration", name_tok);
         new_var.is_valid = false;
         return new_var;
     }
     new_var.name = name_tok.get_contents();
     if (stream.expect(Token::SYMBOL_COLON)) {
-        new_var.annotations = _parse_annotation_list(stream);
+        new_var.annotations = _parse_annotation_list(stream.clip());
     } else if (!stream.at_end()) {
-        print_fsl_err_unexpected_tok("variable declaration", stream.peek());
+        log_unexpected_tok_err_loc("variable declaration", stream.peek());
         new_var.is_valid = false;
         return new_var;
     }
+    const auto& last_debug_info = stream.get_last_debug_info();
+    new_var.debug_info.end_row = last_debug_info.row;
+    new_var.debug_info.end_column = last_debug_info.column + last_debug_info.length;
 	return new_var;
 }
 
-HashMap<StringName, Args> AST::FSLParser::_parse_annotation_list(TokenStream &stream) {
+HashMap<StringName, Args> AST::FSLParser::_parse_annotation_list(TokenStream &&stream) {
     HashMap<StringName, Args> annotations = {};
     while (!stream.at_end()) {
         if (stream.peek().get_type() != Token::IDENTIFIER) {
-            print_fsl_err_expected_tok_loc("valid identifier", "in annotation list", stream.peek());
+            log_expected_tok_err_loc("valid identifier", "in annotation list", stream.peek());
             return {};
         }
         StringName annotation_name = stream.consume().get_contents();
+
+        if (annotations.has(annotation_name)) {
+            log_parser_err("Reused annotation \"%s\"", stream.get_last_debug_info(), FSLError::ERR_REUSED_ANNOTATION, annotation_name);
+            if (stream.descend_paren()) stream.ascend();
+            continue;
+        }
 
         if (stream.descend_paren()) {
             annotations[annotation_name] = _parse_args(stream.clip_and_ascend());
@@ -126,7 +136,7 @@ HashMap<StringName, Args> AST::FSLParser::_parse_annotation_list(TokenStream &st
             annotations[annotation_name] = Args();
         }
         if (!stream.at_end() && !stream.expect(Token::SYMBOL_COMMA)) {
-            print_fsl_err_expected_tok_loc("','", "in annotation list", stream.peek());
+            log_expected_tok_err_loc("','", "in annotation list", stream.peek());
             return {};
         }
     }
@@ -260,13 +270,15 @@ Operation FSLParser::_parse_op_segment(TokenStream &stream) {
 
         case FUNCCALL: {
             FuncCall new_func_call;
+            new_func_call.debug_info = from_token_debug_info(stream.peek().get_debug_info());
             new_func_call.name = stream.consume().get_contents();
             if (!stream.descend_paren()) {
                 new_func_call.is_valid = false;
                 return new_func_call;
             }
             new_func_call.args = _parse_args(stream.clip_and_ascend());
-            stream.ascend();
+            new_func_call.debug_info.end_row = stream.get_last_debug_info().row;
+            new_func_call.debug_info.end_column = stream.get_last_debug_info().column + stream.get_last_debug_info().length;
             return new_func_call;
         }
 
@@ -282,12 +294,17 @@ Operation FSLParser::_parse_op_segment(TokenStream &stream) {
         case VARREF: {
             VariableRef var_ref;
             var_ref.name = stream.consume().get_contents();
+            auto& debug_info = stream.get_last_debug_info();
+            var_ref.debug_info = {debug_info.source_file, debug_info.row, debug_info.row, debug_info.column, debug_info.column + debug_info.length};
             return var_ref;
         }
 
         case LITERAL: {
             // are any literals other than numerical literals needed for a shader language?
             Literal literal;
+            literal.debug_info.file_name = stream.peek().get_debug_info().source_file;
+            literal.debug_info.start_row = stream.peek().get_debug_info().row;
+            literal.debug_info.start_column = stream.peek().get_debug_info().column;
             literal.value += stream.consume().get_contents();
             while(!stream.at_end()) {
                 auto& token = stream.peek();
@@ -301,6 +318,9 @@ Operation FSLParser::_parse_op_segment(TokenStream &stream) {
                     }
                 }
             }
+            const auto& last_debug_info = stream.get_last_debug_info();
+            literal.debug_info.end_row = last_debug_info.row;
+            literal.debug_info.end_column = last_debug_info.column + last_debug_info.length;
             return literal;
         }
 
@@ -315,6 +335,9 @@ Operation FSLParser::_parse_op_segment(TokenStream &stream) {
         case OPER: {
             Operator op;
             String op_str = "";
+            op.debug_info.file_name = stream.peek().get_debug_info().source_file;
+            op.debug_info.start_row = stream.peek().get_debug_info().row;
+            op.debug_info.start_column = stream.peek().get_debug_info().column;
             op_str += stream.consume().get_contents();
             while(!stream.at_end()) {
                 if (stream.peek().get_category() == Token::CATEGORY_SYMBOL_OP && !stream.peek().has_leading_whitespace()) {
@@ -324,6 +347,9 @@ Operation FSLParser::_parse_op_segment(TokenStream &stream) {
                 }
             }
             op.symbol = op_str;
+            const auto& last_debug_info = stream.get_last_debug_info();
+            op.debug_info.end_row = last_debug_info.row;
+            op.debug_info.end_column = last_debug_info.column + last_debug_info.length;
             return op;
         }
 
@@ -344,7 +370,7 @@ Operation FSLParser::_parse_op_segment(TokenStream &stream) {
             UnknownOp fail_ref;
             fail_ref.is_valid = false;
             while(!stream.at_end()) {
-                fail_ref.code.push_back(stream.consume());
+                fail_ref.code += stream.consume().get_contents();
             }
             return fail_ref;
     }
@@ -387,6 +413,15 @@ Expression FSLParser::_parse_expression(TokenStream &&stream, bool is_global) {
             stream.expect(Token::BRACE_OPEN);
             return _parse_for_statement(stream.get_slice());
         } break;
+        case Token::KEYWORD_WHILE: {
+            stream.consume();
+            stream.start_slice();
+            while (!stream.at_end() && stream.peek().get_type() != Token::BRACE_OPEN && stream.peek().get_type() != Token::SYMBOL_SEMICOLON) {
+                stream.consume();
+            }
+            stream.expect(Token::BRACE_OPEN);
+            return _parse_while_statement(stream.get_stream());
+        } break;
         case Token::KEYWORD_RETURN: {
             ReturnExpression ret_expr;
             stream.consume();
@@ -396,6 +431,10 @@ Expression FSLParser::_parse_expression(TokenStream &&stream, bool is_global) {
         case Token::BRACE_OPEN: {
             stream.descend_brace();
             return _parse_brace_scope(stream.clip());
+        } break;
+        case Token::KEYWORD_STRUCT: {
+            return _parse_struct_decl(std::move(stream));
+            
         } break;
         default:
             break;
@@ -429,7 +468,7 @@ IfNode FSLParser::_parse_if_statement(TokenStream &&stream) {
     };
     
     if (!stream.descend_paren()) {
-        print_fsl_err_expected_tok_loc("\'(\'", "after `if`", stream.peek());
+        log_expected_tok_err_loc("\'(\'", "after `if`", stream.peek());
         return err_if();
     }
 
@@ -476,7 +515,7 @@ ForNode FSLParser::_parse_for_statement(TokenStream &&stream) {
     };
     
     if (!stream.descend_paren()) {
-        print_fsl_err_expected_tok_loc("\'(\'", "after `for`", stream.peek());
+        log_expected_tok_err_loc("\'(\'", "after `for`", stream.peek());
         return err_for();
     }
     {
@@ -484,7 +523,10 @@ ForNode FSLParser::_parse_for_statement(TokenStream &&stream) {
         uint32_t statement_len = 0;
         stream.start_slice();
         if (!stream.consume_until<Token::SYMBOL_SEMICOLON>(false)) {
-            print_fsl_err_expected_tok_loc("\';\'", "in `for` statement", stream.peek());
+            auto debug_info = stream.get_last_debug_info();
+            debug_info.column += debug_info.length;
+            debug_info.length = 1;
+            log_parser_err("Expected \';\' after initial statement in for statement", debug_info, FSLError::ERR_TOKEN_EXPECTED);
             return err_for();
         }
         new_for.init = _parse_operation(stream.get_slice());
@@ -492,7 +534,10 @@ ForNode FSLParser::_parse_for_statement(TokenStream &&stream) {
 
         stream.start_slice();
         if (!stream.consume_until<Token::SYMBOL_SEMICOLON>(false)) {
-            print_fsl_err_expected_tok_loc("\';\'", "in `for` statement", stream.peek());
+            auto debug_info = stream.get_last_debug_info();
+            debug_info.column += debug_info.length;
+            debug_info.length = 1;
+            log_parser_err("Expected \';\' after condition in for statement", debug_info, FSLError::ERR_TOKEN_EXPECTED);
             return err_for();
         }
         new_for.cond = _parse_operation(stream.get_slice());
@@ -512,16 +557,29 @@ ForNode FSLParser::_parse_for_statement(TokenStream &&stream) {
 	return new_for;
 }
 
-void FSLParser::_parse_bracket_scope(const TokenScope *scope, Statement &out_statement) {
-	for (auto& token : scope->flatten()) {
-        out_statement.push_back(token);
+WhileNode AST::FSLParser::_parse_while_statement(TokenStream &&stream) {
+    WhileNode new_while;
+    auto err_while = [&](){
+        new_while.is_valid = false;
+        return new_while;
+    };
+    
+    if (!stream.descend_paren()) {
+        log_expected_tok_err_loc("\'(\'", "after `if`", stream.peek());
+        return err_while();
     }
-}
 
-void FSLParser::_parse_paren_scope(const TokenScope* scope, Statement& out_statement) {
-    for (auto& token : scope->flatten()) {
-        out_statement.push_back(token);
+    new_while.cond = _parse_operation(stream.clip_and_ascend());
+
+    if (!stream.descend_brace()) {
+        ScopeNode body_node;
+        body_node.body.push_back(_parse_expression(stream.clip()));
+        new_while.body = body_node;
+        new_while.is_scoped = false;
+        return new_while;
     }
+    new_while.body = _parse_brace_scope(std::move(stream));
+	return new_while;
 }
 
 ScopeNode FSLParser::_parse_brace_scope(TokenStream &&stream) {
@@ -530,6 +588,9 @@ ScopeNode FSLParser::_parse_brace_scope(TokenStream &&stream) {
         new_scope.is_valid = false;
         return new_scope;
     };
+    new_scope.debug_info.file_name = stream.peek().get_debug_info().source_file;
+    new_scope.debug_info.start_row = stream.peek().get_debug_info().row;
+    new_scope.debug_info.start_column = stream.peek().get_debug_info().column;
     uint32_t next_expression_start = stream.get_index();
     uint32_t next_expression_len = 0;
     auto flush_expression = [&](){
@@ -561,6 +622,9 @@ ScopeNode FSLParser::_parse_brace_scope(TokenStream &&stream) {
         }
     }
     flush_expression();
+    const auto& last_debug_info = stream.get_last_debug_info();
+    new_scope.debug_info.end_row = last_debug_info.row;
+    new_scope.debug_info.end_column = last_debug_info.column + last_debug_info.length;
 	return new_scope;
 
 }
@@ -569,14 +633,25 @@ FunctionDecl FSLParser::_parse_func_decl(Slice<TokenTree> tokens) {
     FunctionDecl new_func;
     TokenStream stream = tokens.get_stream();
     auto err_func = [&]() {
+        const auto& last_debug_info = stream.get_last_debug_info();
+        new_func.debug_info.end_row = last_debug_info.row;
+        new_func.debug_info.end_column = last_debug_info.column + last_debug_info.length;
         new_func.is_valid = false;
         return new_func;
     };
 
-    new_func.return_type = _parse_type(stream);
+    new_func.debug_info.file_name = stream.peek().get_debug_info().source_file;
+    new_func.debug_info.start_row = stream.peek().get_debug_info().row;
+    new_func.debug_info.start_column = stream.peek().get_debug_info().column;
+    if (stream.expect(Token::KEYWORD_VOID)) {
+        new_func.return_type = {};
+    } else {
+        new_func.return_type = _parse_type(stream);
+    }
+    
     auto& name_token = stream.peek();
     if (!stream.expect(Token::IDENTIFIER)) {
-        print_fsl_err_expected_tok_loc("valid identifier", "in function declaration", stream.peek());
+        log_expected_tok_err_loc("valid identifier", "in function declaration", stream.peek());
         return err_func();
     }
 
@@ -584,7 +659,7 @@ FunctionDecl FSLParser::_parse_func_decl(Slice<TokenTree> tokens) {
 
     {
         if (!stream.descend_paren()) {
-            print_fsl_err_expected_tok_loc("\'(\'", "after function name", stream.peek());
+            log_expected_tok_err_loc("\'(\'", "after function name", stream.peek());
             return err_func();
         }
         while(!stream.at_end()) {
@@ -604,7 +679,7 @@ FunctionDecl FSLParser::_parse_func_decl(Slice<TokenTree> tokens) {
                     new_func.args.push_back(_parse_var_decl(stream.get_slice(tok_index, var_decl_len)));
                 } break;
                 default:
-                    print_fsl_err_unexpected_tok("function arguments", stream.peek());
+                    log_unexpected_tok_err_loc("function arguments", stream.peek());
                     return err_func();
             }
         }
@@ -613,51 +688,110 @@ FunctionDecl FSLParser::_parse_func_decl(Slice<TokenTree> tokens) {
 
     {
         if (!stream.descend_brace()) {
-            print_fsl_err_expected_tok_loc("\'{\'", "in function declaration", stream.peek());
+            log_expected_tok_err_loc("\'{\'", "in function declaration", stream.peek());
             return err_func();
         }
         new_func.code = _parse_brace_scope(std::move(stream));
     }
 
+    const auto& last_debug_info = stream.get_last_debug_info();
+    new_func.debug_info.end_row = last_debug_info.row;
+    new_func.debug_info.end_column = last_debug_info.column + last_debug_info.length;
 	return new_func;
+}
+
+StructDecl AST::FSLParser::_parse_struct_decl(TokenStream&& stream) {
+    StructDecl new_struct;
+
+    auto err_struct = [&]() {
+        const auto& last_debug_info = stream.get_last_debug_info();
+        new_struct.debug_info.end_row = last_debug_info.row;
+        new_struct.debug_info.end_column = last_debug_info.column + last_debug_info.length;
+        new_struct.is_valid = false;
+        return new_struct;
+    };
+    new_struct.debug_info = from_token_debug_info(stream.consume().get_debug_info());
+    
+    if (stream.peek().get_category() != Token::CATEGORY_IDENTIFIER) {
+        log_expected_tok_err_loc("valid identifier", "in struct declaration", stream.peek());
+        return err_struct();
+    }
+
+    new_struct.name = stream.consume().get_contents();
+
+    if (!stream.descend_brace()) {
+        log_expected_tok_err_loc("\'{\'", "in struct declaration", stream.peek());
+        return err_struct();
+    }
+
+    while (!stream.at_end()) {
+        stream.start_slice();
+        if (!stream.consume_until<Token::SYMBOL_SEMICOLON>(false)) {
+            log_expected_tok_err_loc("\';\'", "in struct declaration", stream.peek());
+        }
+        new_struct.fields.push_back(_parse_var_decl(stream.get_stream()));
+        stream.consume();
+    }
+    stream.ascend();
+
+    if (new_struct.fields.is_empty()) {
+        const auto& last_debug_info = stream.get_last_debug_info();
+        new_struct.debug_info.end_row = last_debug_info.row;
+        new_struct.debug_info.end_column = last_debug_info.column + last_debug_info.length;
+        log_parser_err("Struct \"%s\" has no fields", new_struct.debug_info, FSLError::ERR_EMPTY_STRUCT, new_struct.name);
+        return err_struct();
+    }
+
+    if (!stream.at_end()) {
+        log_unexpected_tok_err_loc("struct declaration", stream.peek());
+        return err_struct();
+    }
+
+    const auto& last_debug_info = stream.get_last_debug_info();
+    new_struct.debug_info.end_row = last_debug_info.row;
+    new_struct.debug_info.end_column = last_debug_info.column + last_debug_info.length;
+	return new_struct;
 }
 
 void FSLParser::_parse_texture(const Token *layout_token, TokenStream &stream, ResourceNode &res_node) {
 	TextureDef new_texture;
     new_texture.format = token_to_tex_format(layout_token);
     auto err_texture = [&](){
-        new_texture.is_valid = false;
+        res_node.is_valid = false;
         res_node.resource = new_texture;
         return;
     };
 
     if(!stream.expect(Token::KEYWORD_UNIFORM)) {
-        print_fsl_err_expected_tok_loc("uniform", "in texture declaration", stream.peek());
+        log_expected_tok_err_loc("uniform", "in texture declaration", stream.peek());
         return err_texture();
     }
 
     auto tex_type_token = stream.consume().get_token();
     auto tex_type = token_to_tex_type(tex_type_token);
     if (!tex_type.has_value()) {
-        print_fsl_err_expected_tok_loc("valid image type", "in texture declaration", stream.peek());
+        log_expected_tok_err_loc("valid image type", "in texture declaration", stream.peek());
         return err_texture();
     }
     new_texture.type = *tex_type;
 
     auto tex_name = stream.peek();
     if(!stream.expect(Token::IDENTIFIER)) {
-        print_fsl_err_expected_tok_loc("valid identifier for texture", "in texture declaration", stream.peek());
+        log_expected_tok_err_loc("valid identifier for texture", "in texture declaration", stream.peek());
         return err_texture();
     }
     res_node.name = tex_name.get_contents();
     res_node.resource = new_texture;
+    const auto& last_debug_info = stream.get_last_debug_info();
+    res_node.debug_info.end_row = last_debug_info.row;
+    res_node.debug_info.end_column = last_debug_info.column + last_debug_info.length;
 }
 
 void FSLParser::_parse_buffer(const Token *layout_token, TokenStream &stream, ResourceNode &res_node) {
     BufferDef new_buffer;
     new_buffer.layout = token_to_buf_format(layout_token);
     auto err_buffer = [&](){
-        new_buffer.is_valid = false;
+        res_node.is_valid = false;
         res_node.resource = new_buffer;
         return;
     };
@@ -670,26 +804,32 @@ void FSLParser::_parse_buffer(const Token *layout_token, TokenStream &stream, Re
             new_buffer.buftype = STORAGE;
             break;
         default:
-            print_fsl_err_expected_tok_loc("uniform or buffer", "in buffer declaration", token);
+            log_expected_tok_err_loc("uniform or buffer", "in buffer declaration", token);
             return err_buffer();
     }
 
     auto buf_name = stream.peek();
     if(!stream.expect(Token::IDENTIFIER)) {
-        print_fsl_err_expected_tok_loc("valid identifier for buffer", "in buffer declaration", stream.peek());
+        log_expected_tok_err_loc("valid identifier for buffer", "in buffer declaration", stream.peek());
         return err_buffer();
     }
     res_node.name = buf_name.get_contents();
 
+    if(stream.expect(Token::SYMBOL_COLON)) {
+        stream.start_slice();
+        stream.consume_until<Token::BRACE_OPEN>(false);
+        new_buffer.annotations = _parse_annotation_list(stream.get_stream());
+    }
+
     if(!stream.descend_brace()) {
-        print_fsl_err_expected_tok_loc("\'{\'", "in buffer declaration", stream.peek());
+        log_expected_tok_err_loc("\'{\'", "in buffer declaration", stream.peek());
         return err_buffer();
     }
     {
         while(!stream.at_end()) {
             stream.start_slice();
             if (!stream.consume_until<Token::SYMBOL_SEMICOLON>(false)) {
-                print_fsl_err_unexpected_tok("buffer declaration", stream.peek());
+                log_unexpected_tok_err_loc("buffer declaration", stream.peek());
                 return err_buffer();
             }
             new_buffer.fields.push_back(_parse_var_decl(stream.get_slice()));
@@ -700,17 +840,26 @@ void FSLParser::_parse_buffer(const Token *layout_token, TokenStream &stream, Re
     if(!stream.expect_not(Token::IDENTIFIER)) {
         new_buffer.buffer_name = stream.consume().get_contents();
     }
+        
     res_node.resource = new_buffer;
+    const auto& last_debug_info = stream.get_last_debug_info();
+    res_node.debug_info.end_row = last_debug_info.row;
+    res_node.debug_info.end_column = last_debug_info.column + last_debug_info.length;
 }
 
 ResourceNode FSLParser::_parse_resource(Slice<TokenTree> tokens) {
     ResourceNode new_resource;
     TokenStream stream = tokens.get_stream();
+    // the layout token is included in the slice so that the debug info can be grabbed from it
+    stream.consume();
+    new_resource.debug_info.file_name = stream.get_last_debug_info().source_file;
+    new_resource.debug_info.start_row = stream.get_last_debug_info().row;
+    new_resource.debug_info.start_column = stream.get_last_debug_info().column;
     ResourceType res_type;
     const Token* layout_token;
     {
         if (!stream.descend_paren()) {
-            print_fsl_err_expected_tok_loc("'('", "after `layout`", stream.peek());
+            log_expected_tok_err_loc("'('", "after `layout`", stream.peek());
             new_resource.is_valid = false;
             return new_resource;
         }
@@ -722,13 +871,13 @@ ResourceNode FSLParser::_parse_resource(Slice<TokenTree> tokens) {
                 res_type = RESTYPE_TEXTURE;
                 break;
             default:
-                print_fsl_err_unexpected_tok("resource layout", stream.peek());
+                log_unexpected_tok_err_loc("resource layout", stream.peek());
                 new_resource.is_valid = false;
                 return new_resource;
         }
         layout_token = stream.consume().get_token();
         if (!stream.at_end()) {
-            print_fsl_err_unexpected_tok("resource layout", stream.peek());
+            log_unexpected_tok_err_loc("resource layout", stream.peek());
         }
         stream.ascend();
     }
@@ -740,7 +889,7 @@ ResourceNode FSLParser::_parse_resource(Slice<TokenTree> tokens) {
     }
 
     if (!stream.at_end()) {
-        print_fsl_err_unexpected_tok("resource declaration", stream.peek());
+        log_unexpected_tok_err_loc("resource declaration", stream.peek());
         new_resource.is_valid = false;
         return new_resource;
     }
@@ -754,15 +903,19 @@ KernelNode FSLParser::_parse_kernel(Slice<TokenTree> tokens) {
         new_kernel.is_valid = false;
         return new_kernel;
     };
+    new_kernel.debug_info.file_name = stream.peek().get_debug_info().source_file;
+    new_kernel.debug_info.start_row = stream.peek().get_debug_info().row;
+    new_kernel.debug_info.start_column = stream.peek().get_debug_info().column;
+    stream.consume();
 
     if (!stream.descend_bracket(false)) {
-        print_fsl_err_expected_tok_loc("kernel size", "in kernel declaration", stream.peek());
+        log_expected_tok_err_loc("kernel size", "in kernel declaration", stream.peek());
         return err_kernel();
     }
     {
         stream.start_slice();
         if(!stream.consume_until<Token::SYMBOL_COMMA>(false)) {
-            print_fsl_err_expected_tok_loc(",", "in kernel size declaration", stream.peek());
+            log_expected_tok_err_loc(",", "in kernel size declaration", stream.peek());
             return err_kernel();
         }
         new_kernel.local_x_threads = _parse_operation(stream.get_slice());
@@ -770,7 +923,7 @@ KernelNode FSLParser::_parse_kernel(Slice<TokenTree> tokens) {
 
         stream.start_slice();
         if(!stream.consume_until<Token::SYMBOL_COMMA>(false)) {
-            print_fsl_err_expected_tok_loc(",", "in kernel size declaration", stream.peek());
+            log_expected_tok_err_loc(",", "in kernel size declaration", stream.peek());
             return err_kernel();
         }
         new_kernel.local_y_threads = _parse_operation(stream.get_slice());
@@ -781,14 +934,14 @@ KernelNode FSLParser::_parse_kernel(Slice<TokenTree> tokens) {
 
     auto& kernel_name = stream.peek();
     if (!stream.expect(Token::IDENTIFIER)) {
-        print_fsl_err_expected_tok_loc("valid identifier", "in kernel declaration", kernel_name);
+        log_expected_tok_err_loc("valid identifier", "in kernel declaration", kernel_name);
         return err_kernel();
     }
     new_kernel.name = kernel_name.get_contents();
     
     {
         if (!stream.descend_paren(false)) {
-            print_fsl_err_expected_tok_loc("\'(\'", "after kernel identifier", stream.peek());
+            log_expected_tok_err_loc("\'(\'", "after kernel identifier", stream.peek());
             return err_kernel();
         }
         while(!stream.at_end()) {
@@ -802,13 +955,13 @@ KernelNode FSLParser::_parse_kernel(Slice<TokenTree> tokens) {
                         stream.consume();
                         auto& bound_token = stream.peek();
                         if (!stream.expect(Token::IDENTIFIER)) {
-                            print_fsl_err_expected_tok_loc("name to bind", "in kernel name binding", bound_token);
+                            log_expected_tok_err_loc("name to bind", "in kernel name binding", bound_token);
                             return err_kernel();
                         }
                         new_kernel.name_bindings[name_binding_key] = bound_token.get_contents();
                         if(!stream.expect(Token::SYMBOL_COMMA)) {
                             if (!stream.at_end()) {
-                                print_fsl_err_expected_tok_loc("\',\'", "in kernel arguments", stream.peek());
+                                log_expected_tok_err_loc("\',\'", "in kernel arguments", stream.peek());
                                 return err_kernel();
                             }
                         }
@@ -821,7 +974,7 @@ KernelNode FSLParser::_parse_kernel(Slice<TokenTree> tokens) {
                     new_kernel.push_constants.push_back(_parse_var_decl(stream.get_slice(tok_index, var_decl_len)));
                 } break;
                 default:
-                    print_fsl_err_unexpected_tok("kernel arguments", stream.peek());
+                    log_unexpected_tok_err_loc("kernel arguments", stream.peek());
                     return err_kernel();
             }
         }
@@ -830,16 +983,17 @@ KernelNode FSLParser::_parse_kernel(Slice<TokenTree> tokens) {
 
     {
         if (!stream.descend_brace()) {
-            print_fsl_err_expected_tok_loc("\'{\'", "in kernel declaration", stream.peek());
+            log_expected_tok_err_loc("\'{\'", "in kernel declaration", stream.peek());
             return err_kernel();
         }
         new_kernel.code = _parse_brace_scope(std::move(stream));
     }
-
+    new_kernel.debug_info.end_row = new_kernel.code.debug_info.end_row;
+    new_kernel.debug_info.end_column = new_kernel.code.debug_info.end_column;
 	return new_kernel;
 }
 
-void FSLParser::_parse_file(fslAST &ast, Span<TokenTree> tokens) {
+LocalVector<FSLError> FSLParser::_parse_file(fslAST &ast, Span<TokenTree> tokens) {
     auto stream = TokenStream(tokens, 0, tokens.size());
     uint32_t next_expression_start = 0;
     uint32_t next_expression_len = 0;
@@ -864,23 +1018,37 @@ void FSLParser::_parse_file(fslAST &ast, Span<TokenTree> tokens) {
         switch(token.get_type()) {
             case Token::KEYWORD_KERNEL: {
                 flush_expression();
-                stream.consume();
                 stream.start_slice();
+                stream.consume();
                 if (!stream.consume_until<Token::BRACE_OPEN>(true)) {
-                    print_fsl_err("Unexpected end of file", stream.peek().get_debug_info().row);
-                    return;
+                    log_parser_err("Unexpected end of file", stream.peek().get_debug_info(), FSLError::ERR_UNEXPECTED_EOF);
+                    return errors;
                 }
                 GlobalDeclaration new_global_decl;
                 new_global_decl.value = _parse_kernel(stream.get_slice());
                 ast.contents.push_back(new_global_decl);
             } break;
-            case Token::KEYWORD_LAYOUT: {
+            case Token::KEYWORD_UNIFORM: {
                 flush_expression();
                 stream.consume();
                 stream.start_slice();
                 if (!stream.consume_until<Token::SYMBOL_SEMICOLON>(false)) {
-                    print_fsl_err("Unexpected end of file", stream.peek().get_debug_info().row);
-                    return;
+                    log_parser_err("Unexpected end of file", stream.peek().get_debug_info(), FSLError::ERR_UNEXPECTED_EOF);
+                    return errors;
+                }
+                GlobalDeclaration new_global_decl;
+                ResourceNode uniform_node;
+                new_global_decl.value = _parse_operation(stream.get_slice());
+                stream.consume();
+                ast.contents.push_back(new_global_decl);
+            } break;
+            case Token::KEYWORD_LAYOUT: {
+                flush_expression();
+                stream.start_slice();
+                stream.consume();
+                if (!stream.consume_until<Token::SYMBOL_SEMICOLON>(false)) {
+                    log_parser_err("Unexpected end of file", stream.peek().get_debug_info(), FSLError::ERR_UNEXPECTED_EOF);
+                    return errors;
                 }
                 GlobalDeclaration new_global_decl;
                 new_global_decl.value = _parse_resource(stream.get_slice());
@@ -900,6 +1068,7 @@ void FSLParser::_parse_file(fslAST &ast, Span<TokenTree> tokens) {
         }
     }
     flush_expression();
+    return errors;
 }
 
 void print_token_tree(const LocalVector<TokenTree>& tree, ConsoleString& output) {
@@ -944,7 +1113,7 @@ TokenScope FSLParser::_collect_scope(Span<Token> tokens, uint32_t &token_index) 
                 break;
         }
     }
-    print_fsl_err("Unexpected end of file", tokens[token_index - 1].debug_info.row);
+    log_parser_err("Unexpected end of file", tokens[token_index - 1].debug_info, FSLError::ERR_UNEXPECTED_EOF);
     out_scope.close = out_scope.eof_sentinel();
 	return out_scope;
 }
@@ -973,23 +1142,29 @@ LocalVector<TokenTree> FSLParser::_collect_scopes(Span<Token> tokens) {
 	return out_tokens;
 }
 
-optional<fslAST> FSLParser::get_ast(String path) {
+Pair<optional<fslAST>, Pair<LocalVector<FSLError>, FileSourceMap>> FSLParser::get_ast(String path) {
     auto ast = fslAST();
-
     FSLParser parser;
-    auto parse_out = parser._preprocess(path);
+    LocalVector<FSLError> errors;
+    auto [parse_out, sources] = parser._preprocess(path);
     if (!parse_out.has_value()) {
-        return {};
+        return {{}, {parser.get_errors(), sources}};
     }
-    ast.tokens = std::move(*parse_out);
+    auto tokens = std::move(*parse_out);
 
-    LocalVector<TokenTree> tree = parser._collect_scopes(ast.tokens.span());
-    parser._parse_file(ast, tree.span());
-
-    if (!FSLValidator::validate_ast(ast)) {
-        return {};
+    LocalVector<TokenTree> tree = parser._collect_scopes(tokens.span());
+    auto parse_errors = parser._parse_file(ast, tree.span());
+    for (const auto& error : parse_errors) {
+        errors.push_back(error);
     }
-	return std::move(ast);
+    auto validator_errors = FSLValidator::validate_ast(ast);
+    for (const auto& error : validator_errors) {
+        errors.push_back(error);
+    }
+    if (!errors.is_empty()) {
+        return {{}, {errors, sources}};
+    }
+	return {std::move(ast), {errors, sources}};
 }
 
 // ************************************
@@ -1018,11 +1193,11 @@ optional<FSLParser::MacroDef> FSLParser::_process_macro(const LocalVector<Token>
                 DISCARD_WHITESPACE;
             }
             if (tokens[token_index].token_type == Token::NEWLINE) {
-                print_fsl_err("Incomplete macro definition", tokens[token_index].debug_info.row);
+                log_preprocessor_err("Incomplete macro definition", tokens[token_index].debug_info, FSLError::ERR_INCOMPLETE_MACRO);
                 return {};
             }
             if (!tokens[token_index].contents.is_valid_ascii_identifier()) {
-                print_fsl_err_expected_tok_loc("argument name", "in `define`", &tokens[token_index]);
+                log_expected_tok_err_loc("argument name", "in `define`", &tokens[token_index]);
                 return {};
             }
             new_macro.args.push_back(tokens[token_index++].contents);
@@ -1032,7 +1207,7 @@ optional<FSLParser::MacroDef> FSLParser::_process_macro(const LocalVector<Token>
                 break;
             }
             if (tokens[token_index].contents != ",") {
-                print_fsl_err_expected_tok_loc("\",\"", "in `define`", &tokens[token_index]);
+                log_expected_tok_err_loc("\",\"", "in `define`", &tokens[token_index]);
                 return {};
             } 
             token_index++;
@@ -1058,7 +1233,7 @@ optional<LocalVector<Token>> FSLParser::_expand_macro(const LocalVector<Token>& 
     if (curr_macro.args.size() > 0) {
         uint32_t arg_index = 0;
         if (tokens[token_index].contents != "(") {
-            print_fsl_err_expected_tok_loc("\"(\"", "in macro usage", &tokens[token_index]);
+            log_expected_tok_err_loc("\"(\"", "in macro usage", &tokens[token_index]);
         }
         token_index++;
         LocalVector<Token> curr_arg_tokens;
@@ -1078,7 +1253,7 @@ optional<LocalVector<Token>> FSLParser::_expand_macro(const LocalVector<Token>& 
                         
                     }
                     if (arg_index < curr_macro.args.size()) {
-                        print_fsl_err("Too few arguments provided for macro, expected %d but was given %d", tokens[token_index].debug_info.row, curr_macro.args.size(), arg_index);
+                        log_preprocessor_err("Too few arguments provided for macro, expected %d but was given %d", tokens[token_index].debug_info, FSLError::ERR_MACRO_ARG_COUNT, curr_macro.args.size(), arg_index);
                         return {};
                     } 
                 } else {
@@ -1094,13 +1269,13 @@ optional<LocalVector<Token>> FSLParser::_expand_macro(const LocalVector<Token>& 
                     args[curr_macro.args[arg_index]] = curr_arg_tokens;
                     arg_index++;
                     if (arg_index >= curr_macro.args.size()) {
-                        print_fsl_err("Too many arguments provided for macro, expected %d", tokens[token_index].debug_info.row, curr_macro.args.size());
+                        log_preprocessor_err("Too many arguments provided for macro, expected %d", tokens[token_index].debug_info, FSLError::ERR_MACRO_ARG_COUNT, curr_macro.args.size());
                         return {};
                     }
                     curr_arg_tokens.clear();
                     token_index++;
                 } else {
-                    print_fsl_err_expected_tok("argument value", &tokens[token_index]);
+                    log_expected_tok_err("argument value", &tokens[token_index]);
                     return {};
                 }  
             }
@@ -1167,7 +1342,29 @@ String reduce_file_path(const String& path) {
     return clean_path;
 }
 
-optional<LocalVector<Token>> FSLParser::_preprocess(String &path) {
+LocalVector<String> load_file_as_strings(const Ref<FileAccess>& file) {
+    LocalVector<String> file_strings;
+    const String file_string = file->get_as_text();
+    String next_string = "";
+    uint32_t string_index = 0;
+    while (string_index < file_string.length()) {
+        switch (file_string[string_index]) {
+            case '\n':
+            case '\r':
+                file_strings.push_back(next_string);
+                next_string = "";
+                break;
+            default:
+                next_string += file_string[string_index];
+                break;
+        }
+        string_index++;
+    }
+    file_strings.push_back(next_string);
+    return file_strings;
+}
+
+Pair<optional<LocalVector<Token>>, HashMap<StringName, LocalVector<String>>> FSLParser::_preprocess(String &path) {
     String path_to_file = path.get_base_dir() + '/';
     auto main_file_opt = load_file(path);
     if (!main_file_opt.has_value()) {
@@ -1176,12 +1373,15 @@ optional<LocalVector<Token>> FSLParser::_preprocess(String &path) {
     }
     auto main_file = *main_file_opt;
     LocalVector<String> included_files = {path};
+    HashMap<StringName, LocalVector<String>> sources = {{path, load_file_as_strings(main_file)}};
     FSLLexer lexer = FSLLexer();
+    
     auto tokens_opt = lexer.tokenize(path, main_file->get_as_text());
     if (!tokens_opt.has_value()) {
         printvf_err("Failed to parse file at \"%s\"", path);
-        return {};
+        return {{}, sources};
     }
+    
     LocalVector<Token> tokens = *tokens_opt;
 
     uint32_t token_index = 0;
@@ -1206,40 +1406,44 @@ optional<LocalVector<Token>> FSLParser::_preprocess(String &path) {
                         token_index++;
                         DISCARD_WHITESPACE;
                         if (tokens[token_index].contents != "\"") {
-                            print_fsl_err_expected_tok_loc("\"", "in include directive", &tokens[token_index]);
-                            return {};
+                            log_expected_tok_err_loc("\"", "in include directive", &tokens[token_index]);
+                            return {{}, sources};
                         }
+                        DebugInfo debug_info = {tokens[token_index].debug_info.source_file, tokens[token_index].debug_info.row, tokens[token_index].debug_info.row, tokens[token_index].debug_info.column, tokens[token_index].debug_info.column + tokens[token_index].debug_info.length};
                         token_index++;
                         String relative_include_path = "";
                         while (token_index < tokens.size() && tokens[token_index].contents != "\"") {
                             if (tokens[token_index].token_type == Token::NEWLINE) {
-                                print_fsl_err("Incomplete include directive", tokens[token_index].debug_info.row);
-                                return {};
+                                debug_info.end_column = tokens[token_index].debug_info.column + tokens[token_index].debug_info.length;
+                                log_preprocessor_err("Incomplete include directive", debug_info, FSLError::ERR_BAD_INCLUDE);
+                                return {{}, sources};
                             }
                             relative_include_path += tokens[token_index].contents;
                             token_index++;
                         }
+                        debug_info.end_column = tokens[token_index].debug_info.column + tokens[token_index].debug_info.length;
                         token_index++;
                         DISCARD_WHITESPACE;
                         if (tokens[token_index].token_type != Token::NEWLINE) {
-                            print_fsl_err_expected_tok_loc("newline", "in include directive", &tokens[token_index]);
-                            return {};
+                            log_expected_tok_err_loc("newline", "in include directive", &tokens[token_index]);
+                            return {{}, sources};
                         }
                         token_index++;
                         String true_include_path = reduce_file_path(path_to_file + relative_include_path);
                         uint32_t token_insert_index = token_index;
                         auto included_file_opt = load_file(true_include_path);
                         if (!included_file_opt.has_value()) {
-                            print_error(vformat("Failed to load file at \"%s\"", true_include_path));
-                            return {};
+                            log_preprocessor_err("Failed to load file at \"%s\"", debug_info, FSLError::ERR_FAILED_INCLUDE, true_include_path);
+                            return {{}, sources};
                         }
                         auto included_file = *included_file_opt;
                         if (!included_files.has(true_include_path)) {
                             included_files.push_back(true_include_path);
+                            sources[true_include_path] = load_file_as_strings(included_file);
                             auto include_opt = lexer.tokenize(true_include_path, included_file->get_as_text());
                             if (!include_opt.has_value()) {
-                                printvf_err("Failed to parse file at \"%s\"", true_include_path);
-                                return {};
+                                log_preprocessor_err("Failed to load file at \"%s\"", debug_info, FSLError::ERR_FAILED_INCLUDE, true_include_path);
+                                return {{}, sources};
                             }
                             for (auto &token : *include_opt) {
                                 tokens.insert(token_insert_index++, token);
@@ -1252,17 +1456,17 @@ optional<LocalVector<Token>> FSLParser::_preprocess(String &path) {
                         token_index++;
                         DISCARD_WHITESPACE;
                         if (tokens[token_index].token_type != Token::IDENTIFIER) {
-                            print_fsl_err_expected_tok_loc("identifier", "in `define`", &tokens[token_index]);
-                            return {};
+                            log_expected_tok_err_loc("identifier", "in `define`", &tokens[token_index]);
+                            return {{}, sources};
                         }
                         String define_name = tokens[token_index++].contents;
                         if (macros.has(define_name)) {
-                            print_fsl_err("Redefinition of \"%s\" at line %d, use `undef` first to change the definition", tokens[token_index].debug_info.row, tokens[token_index].contents);
-                            return {};
+                            log_preprocessor_err("Redefinition of \"%s\" at line %d, use `undef` first to change the definition", tokens[token_index].debug_info, FSLError::ERR_MACRO_REDEFINITION, tokens[token_index].contents);
+                            return {{}, sources};
                         }
                         auto macro_def = _process_macro(tokens, token_index);
                         if (!macro_def.has_value()) {
-                            return {};
+                            return {{}, sources};
                         }
                         macros[define_name] = *macro_def;
                     }
@@ -1276,8 +1480,8 @@ optional<LocalVector<Token>> FSLParser::_preprocess(String &path) {
                         token_index++;
                         DISCARD_WHITESPACE;
                         if (tokens[token_index].token_type != Token::NEWLINE) {
-                            print_fsl_err_expected_tok_loc("newline", "after `undef` directive", &tokens[token_index]);
-                            return {};
+                            log_expected_tok_err_loc("newline", "after `undef` directive", &tokens[token_index]);
+                            return {{}, sources};
                         }
                         break;
                     }
@@ -1293,8 +1497,8 @@ optional<LocalVector<Token>> FSLParser::_preprocess(String &path) {
                         token_index++;
                         DISCARD_WHITESPACE;
                         if (tokens[token_index].token_type != Token::NEWLINE) {
-                            print_fsl_err_expected_tok_loc("newline", "after `ifdef` directive", &tokens[token_index]);
-                            return {};
+                            log_expected_tok_err_loc("newline", "after `ifdef` directive", &tokens[token_index]);
+                            return {{}, sources};
                         }
                         token_index++;
                         break;
@@ -1307,7 +1511,7 @@ optional<LocalVector<Token>> FSLParser::_preprocess(String &path) {
                     } else if (ifdef_state_stack.top() == FALSE) {
                         ifdef_state_stack.top() = ELSETRUE;
                     } else {
-                        print_fsl_err("Unexpected `else` directive", tokens[token_index].debug_info.row);
+                        log_preprocessor_err("Unexpected `else` directive", tokens[token_index].debug_info, FSLError::ERR_UNEXPECTED_DIRECTIVE);
                         return {};
                     }
                     while(tokens[token_index++].token_type != Token::NEWLINE);
@@ -1318,15 +1522,15 @@ optional<LocalVector<Token>> FSLParser::_preprocess(String &path) {
                     if (ifdef_state_stack.top() != NONE) {
                         ifdef_state_stack.pop();
                     } else {
-                        print_fsl_err("Unexpected `endif` directive", tokens[token_index].debug_info.row);
-                        return {};
+                        log_preprocessor_err("Unexpected `endif` directive", tokens[token_index].debug_info, FSLError::ERR_UNEXPECTED_DIRECTIVE);
+                        return {{}, sources};
                     }
                     while(tokens[token_index++].token_type != Token::NEWLINE);
                     break;
                 }
                 if (ifdef_state_stack.top() != FALSE && ifdef_state_stack.top() != ELSEFALSE && !valid_directive) {
-                    print_fsl_err("\"%s\" is not a valid preprocessor directive", tokens[token_index].debug_info.row, tokens[token_index].contents);
-                    return {};
+                    log_preprocessor_err("\"%s\" is not a valid preprocessor directive", tokens[token_index].debug_info, FSLError::ERR_INVALID_DIRECTIVE, tokens[token_index].contents);
+                    return {{}, sources};
                 }
             } break;
             default:
@@ -1334,7 +1538,7 @@ optional<LocalVector<Token>> FSLParser::_preprocess(String &path) {
                     if (macros.has(token.contents)) {
                         auto macro_tokens = _expand_macro(tokens, token_index, macros, macros[token.contents]);
                         if (!macro_tokens.has_value()) {
-                            return {};
+                            return {{}, sources};
                         }
                         for (auto &def_tok : *macro_tokens) {
                             out_tokens.push_back(def_tok);
@@ -1347,10 +1551,10 @@ optional<LocalVector<Token>> FSLParser::_preprocess(String &path) {
         }
     }
     if (ifdef_state_stack.size() != 1) {
-        print_fsl_err("Expected `#endif`", tokens[token_index-1].debug_info.row);
-        return {};
+        log_preprocessor_err("Expected `#endif`", tokens[token_index-1].debug_info, FSLError::ERR_OPEN_IF);
+        return {{}, sources};
     }
-    return out_tokens;
+    return {{out_tokens}, sources};
 }
 #pragma endregion
 

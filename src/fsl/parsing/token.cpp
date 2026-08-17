@@ -1,5 +1,7 @@
 #include "token.h"
 
+// TODO: have last_debug_info reflect scope.close when consume() hits a scope or when ascending from a scope while leaving _consume unchanged 
+
 const TokenTree& TokenStream::eof_sentinel() const {
     static Token eos_tok = Token(Token::ERR_EOS);
     static const TokenTree sentinel = TokenTree(&eos_tok);
@@ -23,7 +25,9 @@ const TokenTree &TokenStream::consume() {
     if (streams.top().peek() == nullptr) {
         return eof_sentinel();
     }
-    return *_consume();
+    auto& out = *_consume();
+    // if (out.)
+    return out;
 }
 
 bool TokenStream::expect(Token::TokenType tok_type) {

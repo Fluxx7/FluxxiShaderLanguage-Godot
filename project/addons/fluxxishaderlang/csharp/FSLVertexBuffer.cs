@@ -14,4 +14,14 @@ public partial class FSLVertexBuffer : FSLBuffer
     public FSLVertexBuffer(GodotObject inner) : base(inner) { }
 
     public FSLVertexBuffer() : this(ClassDB.Instantiate(GDClassName).AsGodotObject()) { }
+
+    public void SetVertexCount(uint numVertices) => Inner.Call(MethodName.SetVertexCount, numVertices);
+
+    public void SetVertexSizeBytes(uint vertexSize) => Inner.Call(MethodName.SetVertexSizeBytes, vertexSize);
+
+    public new static class MethodName
+    {
+        public static readonly StringName SetVertexCount = "set_vertex_count";
+        public static readonly StringName SetVertexSizeBytes = "set_vertex_size_bytes";
+    }
 }

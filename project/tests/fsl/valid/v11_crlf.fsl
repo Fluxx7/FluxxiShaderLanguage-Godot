@@ -2,9 +2,9 @@
 //! KERNELS: crlfKernel
 // CRLF line endings throughout, and no trailing newline on the last line.
 layout(std430) buffer crlfBuf {
-    float[] crlf_out;
+    f32[] crlf_out;
 };
 
 kernel[16, 1, 1] crlfKernel(id : GlobalInvocationID) {
-    crlf_out[id.x] = float(id.x) * 0.5;
+    crlf_out[id.x] = f32(id.x) * 0.5;
 }

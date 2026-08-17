@@ -16,7 +16,8 @@ private:
     };
 
     HashMap<StringName, KernelDef> kernel_defs;
-    HashMap<StringName, CodeInfo> func_infos;
+    HashMap<StringName, LocalVector<CodeInfo>> func_infos;
+    HashMap<StringName, FSLStruct> structs;
     HashSet<StringName> global_vars;
     HashMap<StringName, AST::ResourceNode> resources;
     HashMap<StringName, ComputeKernel::SpecializationConstant> spec_constants;
@@ -30,6 +31,7 @@ private:
     HashSet<uint32_t> used_constant_ids;
     ConsoleString string_builder;
     CodeBuilder(const AST::fslAST& ast);
+    FSLType typeref_to_fslType(const AST::TypeRef &type_ref, BufferFormat format);
     CodeInfo gen_var_decl(const AST::VariableDecl& var_decl);
     CodeInfo gen_operation(const AST::Operation &operation, bool is_first);
     CodeInfo gen_operation_list(const AST::OperationList &op_list);

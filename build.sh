@@ -26,8 +26,8 @@ if [ "$TARGET" != "template_release" ]; then
   EXTRA+=(debug_symbols=yes)
 fi
 
-echo "==> scons platform=macos arch=$ARCH target=$TARGET ${EXTRA[*]} -j$JOBS"
-scons platform=macos arch="$ARCH" target="$TARGET" "${EXTRA[@]}" -j"$JOBS"
+echo "==> scons platform=macos arch=$ARCH target=$TARGET custom_api_file=extension_api.json ${EXTRA[*]} -j$JOBS"
+scons platform=macos arch="$ARCH" target="$TARGET" custom_api_file=extension_api.json "${EXTRA[@]}" -j"$JOBS"
 
 # scons installs an arch-suffixed dylib, but fluxxishaderlang.gdextension loads
 # the non-suffixed filename. Mirror it so the freshly built lib is the one Godot opens.

@@ -13,6 +13,7 @@
 #include "compute_shaders/compute_kernel.h"
 #include "compute_shaders/compute_group.h"
 #include "code_builder.h"
+#include "fsl/errors.h"
 
 using namespace godot;
 
@@ -21,16 +22,21 @@ class FSLFile : public RefCounted {
 private:
 	FSLFile() = default;
 protected:
+    struct FileData {
+        HashMap<StringName, KernelDef> compute_kernels;
+    };
 	static void _bind_methods();
-    
+
+    // indirection layer, which is needed so Godot can load its core before the HashMap is initialized
+    static HashMap<StringName, optional<FileData>>& get_compilation_cache();
     void load_shader();
     
 
     unsigned long prev_transpile_time;
     
-    HashMap<StringName, KernelDef> compute_kernels;
+    FileData* file_data;
     StringName path;
-    AST::fslAST currAst;
+    LocalVector<FSLError> errors;
 public:
     FSLFile(String file_path);
 
@@ -38,7 +44,6 @@ public:
     String get_kernel_source(StringName kernel_name);
     Ref<ComputeKernel> get_kernel(StringName kernel_name, RenderingDevice *rd);
     Ref<ComputeGroup> get_kernel_group(RenderingDevice *rd = nullptr);
-
 
     static Ref<FSLFile> from_file(String file_path);
     

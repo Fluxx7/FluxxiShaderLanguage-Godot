@@ -2,7 +2,7 @@
 // void function call used as a value.
 
 layout(std430) buffer sinkBuf {
-    float[] sink;
+    f32[] sink;
 };
 
 void doNothing() {
@@ -10,6 +10,6 @@ void doNothing() {
 }
 
 kernel[1, 1, 1] voidInExpr() {
-    float x = doNothing();
+    f32 x = doNothing();
     sink[0] = x;
 }

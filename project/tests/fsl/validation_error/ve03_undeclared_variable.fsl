@@ -2,7 +2,7 @@
 // Reads a variable that was never declared anywhere.
 
 layout(std430) buffer sinkBuf {
-    float[] sink;
+    f32[] sink;
 };
 
 kernel[1, 1, 1] undeclaredVar() {

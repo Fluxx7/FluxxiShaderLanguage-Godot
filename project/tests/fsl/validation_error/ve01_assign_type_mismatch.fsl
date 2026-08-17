@@ -1,11 +1,11 @@
 //! EXPECT: validation_error
-// float3 initialized from a float2 constructor.
+// f32x3 initialized from a f32x2 constructor.
 
 layout(std430) buffer sinkBuf {
-    float[] sink;
+    f32[] sink;
 };
 
 kernel[1, 1, 1] assignMismatch() {
-    float3 v = float2(1.0, 2.0);
+    f32x3 v = f32x2(1.0, 2.0);
     sink[0] = v.x;
 }

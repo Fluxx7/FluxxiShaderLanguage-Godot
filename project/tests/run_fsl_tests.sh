@@ -21,7 +21,7 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 FSL_DIR="$SCRIPT_DIR/fsl"
-GODOT="${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}"
+GODOT="${GODOT:-/Users/nicholas/Godot/Godot Compilations/Godot 4.8 Fork.app/Contents/MacOS/Godot}"
 TIMEOUT_SECS="${FSL_TEST_TIMEOUT:-20}"
 
 if [ ! -x "$GODOT" ]; then
@@ -32,6 +32,7 @@ fi
 pass_count=0
 fail_count=0
 skip_count=0
+passed_list=""
 failed_list=""
 
 result_line() { printf '%-5s %-48s %s\n' "$1" "$2" "$3"; }
@@ -112,6 +113,8 @@ EOF
     case "$verdict" in
         PASS)
             pass_count=$((pass_count + 1))
+            passed_list="${passed_list}  $f
+"
             result_line PASS "$f" ""
             ;;
         SKIP)
@@ -130,6 +133,11 @@ done
 
 echo
 echo "passed: $pass_count   failed: $fail_count   skipped: $skip_count"
+if [ "$pass_count" -gt 0 ]; then
+    echo
+    echo "passes:"
+    printf '%s' "$passed_list"
+fi
 if [ "$fail_count" -gt 0 ]; then
     echo
     echo "failures:"

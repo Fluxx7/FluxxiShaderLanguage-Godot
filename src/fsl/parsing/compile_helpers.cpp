@@ -1,46 +1,56 @@
 #include "code_builder.h"
 
+AHashMap<StringName, String> _init_type_mappings() {
+    AHashMap<StringName, String> type_mappings = {
+        {"boolx2", "bvec2"},
+        {"boolx3", "bvec3"},
+        {"boolx4", "bvec4"}
+    };
+    const String type_names[] = {
+        "f16",
+        "f32",
+        "f64",
+        "u8",
+        "u16",
+        "u32",
+        "u64",
+        "i8",
+        "i16",
+        "i32",
+        "i64"
+    };
+    const AHashMap<char32_t, String> prefix_to_name = {
+        {'f', "float"},
+        {'i', "int"},
+        {'u', "uint"}
+    };
+    for (const auto& type : type_names) { 
+        if (prefix_to_name.has(type[0])) {
+            type_mappings[type] = vformat("%s%s_t", prefix_to_name[type[0]], type.right(-1)); ;
+            for (uint32_t vec_size : {2, 3, 4}) {
+                type_mappings[vformat("%sx%d", type, vec_size)] = vformat("%svec%d", type, vec_size);
+                if (type[0] == 'f') {
+                    for (uint32_t mat_size : {2,3,4}) {
+                        type_mappings[vformat("%sx%dx%d", type, vec_size, mat_size)] = vformat("%smat%dx%d", type, vec_size, mat_size);
+                    }
+                }
+            }
+        }   
+    }
+    return type_mappings;
+}
+
+AHashMap<StringName, String>& _type_mappings() {
+    static AHashMap<StringName, String> type_mappings = _init_type_mappings();
+    return type_mappings;
+}
+
+
+
 String to_original_type(const String &identifier) {
-    static const char *changed_types[] = {
-        "float2",
-        "float3",
-        "float4",
-        "int2",
-        "int3",
-        "int4",
-        "uint2",
-        "uint3",
-        "uint4",
-        "double2",
-        "double3",
-        "double4",
-        "bool2",
-        "bool3",
-        "bool4"
-    }; 
-    static const char *original_types[] = {
-        "vec2",
-        "vec3",
-        "vec4",
-        "ivec2",
-        "ivec3",
-        "ivec4",
-        "uvec2",
-        "uvec3",
-        "uvec4",
-        "dvec2",
-        "dvec3",
-        "dvec4",
-        "bvec2",
-        "bvec3",
-        "bvec4"
-    }; 
-    uint32_t curr_index = 0;
-    for (auto type_name : changed_types) {
-        if (identifier == type_name) {
-            return original_types[curr_index];
-        }
-        curr_index++;
+    const auto& type_mappings = _type_mappings();
+    if (type_mappings.has(identifier)) {
+        return type_mappings[identifier];
     }
     return identifier;
 }

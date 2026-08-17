@@ -4,10 +4,10 @@ Ref<FSLResource> _init_buffer(const BufferInfo &buf_info, RenderingDevice *rd) {
     if (buf_info.type == UNIFORM) {
         return FSLUniformBuffer::new_buffer(rd, buf_info);
     } else {
-        switch (buf_info.format) {
-            case VERTEX:
+        switch (buf_info.specialization) {
+            case BufferInfo::GODOT_VERTEX:
                 return FSLVertexBuffer::new_buffer(rd, buf_info);
-            case INDEX:
+            case BufferInfo::GODOT_INDEX:
                 return FSLIndexBuffer::new_buffer(rd, buf_info);
             default:
                 return FSLStorageBuffer::new_buffer(rd, buf_info);

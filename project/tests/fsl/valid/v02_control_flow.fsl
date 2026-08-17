@@ -5,11 +5,11 @@
 // ladders, nested for loops, empty bodies, bare scope blocks, early returns.
 
 layout(std430) buffer flowResults {
-    int[] flow_out;
+    i32[] flow_out;
 };
 
-kernel[8, 8, 1] controlFlow(id : GlobalInvocationID, int width) {
-    int acc = 0;
+kernel[8, 8, 1] controlFlow(id : GlobalInvocationID, i32 width) {
+    i32 acc = 0;
 
     // dangling else: must bind to the inner if
     if (id.x == 0u)
@@ -23,24 +23,24 @@ kernel[8, 8, 1] controlFlow(id : GlobalInvocationID, int width) {
     else { acc = 40; }
 
     // triple-nested for loops, braceless outer levels
-    for (int i = 0; i < 4; i++)
-        for (int j = 0; j < 4; j++) {
-            for (int k = 0; k < 2; ++k) acc += i * j - k;
+    for (i32 i = 0; i < 4; i++)
+        for (i32 j = 0; j < 4; j++) {
+            for (i32 k = 0; k < 2; ++k) acc += i * j - k;
         }
 
     // compound post-expression, braceless single-statement body
-    for (int i = 0; i < width; i += 2) acc += i;
+    for (i32 i = 0; i < width; i += 2) acc += i;
 
     // empty loop body
-    for (int i = 0; i < 3; i++) { }
+    for (i32 i = 0; i < 3; i++) { }
 
     // early return, then a bare scope block with its own locals
     if (acc < -100000) { return; }
     {
-        int scoped = acc * 2;
+        i32 scoped = acc * 2;
         if (scoped > 1000000) return;
         acc = scoped / 2;
     }
 
-    flow_out[id.x + id.y * uint(width)] = acc;
+    flow_out[id.x + id.y * u32(width)] = acc;
 }

@@ -2,7 +2,8 @@
   "namespace": "FluxxiShaderLang",
   "engine_enums": [
     "RenderingDevice.UniformType",
-    "RenderingDevice.TextureUsageBits"
+    "RenderingDevice.TextureUsageBits",
+    "RenderingDevice.IndexBufferFormat"
   ],
   "classes": {
     "FSLResource": {
@@ -63,13 +64,17 @@
       ]
     },
     "FSLVertexBuffer": {
-      "extends": "FSLBuffer"
+      "extends": "FSLBuffer",
+      "methods": [
+        { "name": "set_vertex_count", "args": [{ "name": "num_vertices", "type": "uint" }] },
+        { "name": "set_vertex_size_bytes", "args": [{ "name": "vertex_size", "type": "uint" }] }
+      ]
     },
     "FSLIndexBuffer": {
       "extends": "FSLBuffer",
       "methods": [
-        { "name": "set_field", "args": [{ "name": "field", "type": "StringName" }, { "name": "value", "type": "Variant" }] },
-        { "name": "set_buffer", "args": [{ "name": "values", "type": "Godot.Collections.Dictionary<StringName, Variant>" }] }
+        { "name": "set_index_count", "args": [{ "name": "num_indices", "type": "uint" }] },
+        { "name": "set_index_format", "args": [{ "name": "new_format", "type": "RenderingDevice.IndexBufferFormat" }] }
       ]
     },
     "FSLTexture2D": {
@@ -127,6 +132,13 @@
           { "name": "z_workgroups", "type": "uint" },
           { "name": "push_constants", "type": "Godot.Collections.Dictionary<StringName, Variant>", "default": "null" }
         ] },
+        { "name": "dispatch_indirect", "args": [
+          { "name": "command_buffer", "type": "FSLBuffer" },
+          { "name": "offset", "type": "uint" },
+          { "name": "push_constants", "type": "Godot.Collections.Dictionary<StringName, Variant>", "default": "null" }
+        ] },
+        { "name": "get_specialization_constant_value", "return": "Variant", "args": [{ "name": "spec_constant", "type": "StringName" }] },
+        { "name": "set_specialization_constant", "args": [{ "name": "spec_constant", "type": "StringName" }, {"name": "value", "type": "Variant"}] },
         { "name": "assign_resource", "args": [
           { "name": "resource", "type": "FSLResource" },
           { "name": "resource_name", "type": "StringName" }
@@ -149,11 +161,25 @@
           { "name": "resource", "type": "FSLResource" },
           { "name": "resource_name", "type": "StringName" }
         ] },
+        { "name": "set_specialization_constant", "args": [{ "name": "spec_constant", "type": "StringName" }, {"name": "value", "type": "Variant"}] },
         { "name": "dispatch", "args": [
           { "name": "kernel_name", "type": "StringName" },
           { "name": "x_invocations", "type": "uint" },
           { "name": "y_invocations", "type": "uint" },
           { "name": "z_invocations", "type": "uint" },
+          { "name": "push_constants", "type": "Godot.Collections.Dictionary<StringName, Variant>", "default": "null" }
+        ] },
+        { "name": "dispatch_workgroups", "args": [
+          { "name": "kernel_name", "type": "StringName" },
+          { "name": "x_workgroups", "type": "uint" },
+          { "name": "y_workgroups", "type": "uint" },
+          { "name": "z_workgroups", "type": "uint" },
+          { "name": "push_constants", "type": "Godot.Collections.Dictionary<StringName, Variant>", "default": "null" }
+        ] },
+        { "name": "dispatch_indirect", "args": [
+          { "name": "kernel_name", "type": "StringName" },
+          { "name": "command_buffer", "type": "FSLBuffer" },
+          { "name": "offset", "type": "uint" },
           { "name": "push_constants", "type": "Godot.Collections.Dictionary<StringName, Variant>", "default": "null" }
         ] },
         { "name": "get_storage_buffer", "return": "FSLStorageBuffer", "args": [{ "name": "buffer_name", "type": "StringName" }] },
@@ -169,7 +195,7 @@
       "base": "RefCounted",
       "methods": [
         { "name": "make_new", "static": true, "return": "ComputePlan", "args": [
-          { "name": "rendering_device", "type": "RenderingDevice" }
+          { "name": "rendering_device", "type": "RenderingDevice", "default": "null" }
         ] },
         { "name": "add_barrier", "return": "ComputePlan", "args": [
           { "name": "is_temp", "type": "bool", "default": "false" }
@@ -182,15 +208,23 @@
           { "name": "push_constants", "type": "Godot.Collections.Dictionary<StringName, Variant>", "default": "null" },
           { "name": "is_temp", "type": "bool", "default": "false" }
         ] },
-        { "name": "add_plan", "args": [
-          { "name": "subplan", "type": "ComputePlan" },
-          { "name": "is_temp", "type": "bool", "default": "false" }
-        ] },{ "name": "add_kernel_workgroups", "return": "ComputePlan", "args": [
+        { "name": "add_kernel_workgroups", "return": "ComputePlan", "args": [
           { "name": "kernel", "type": "ComputeKernel" },
           { "name": "x_workgroups", "type": "uint" },
           { "name": "y_workgroups", "type": "uint" },
           { "name": "z_workgroups", "type": "uint" },
           { "name": "push_constants", "type": "Godot.Collections.Dictionary<StringName, Variant>", "default": "null" },
+          { "name": "is_temp", "type": "bool", "default": "false" }
+        ] },
+        { "name": "add_kernel_indirect", "return": "ComputePlan", "args": [
+          { "name": "kernel", "type": "ComputeKernel" },
+          { "name": "command_buffer", "type": "FSLBuffer" },
+          { "name": "offset", "type": "uint" },
+          { "name": "push_constants", "type": "Godot.Collections.Dictionary<StringName, Variant>", "default": "null" },
+          { "name": "is_temp", "type": "bool", "default": "false" }
+        ] },
+        { "name": "add_plan", "args": [
+          { "name": "subplan", "type": "ComputePlan" },
           { "name": "is_temp", "type": "bool", "default": "false" }
         ] },
         { "name": "dispatch" }

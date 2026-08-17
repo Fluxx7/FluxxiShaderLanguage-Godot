@@ -2,7 +2,7 @@
 // Kernel body brace is never closed; file ends mid-scope.
 
 layout(std430) buffer peBuf {
-    float[] xs;
+    f32[] xs;
 };
 
 kernel[8, 1, 1] broken(g : GlobalInvocationID) {

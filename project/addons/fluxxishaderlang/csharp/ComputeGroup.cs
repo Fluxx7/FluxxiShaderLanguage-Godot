@@ -32,7 +32,13 @@ public partial class ComputeGroup
 
     public void AssignResource(FSLResource resource, StringName resourceName) => Inner.Call(MethodName.AssignResource, resource?.Inner, resourceName);
 
+    public void SetSpecializationConstant(StringName specConstant, Variant value) => Inner.Call(MethodName.SetSpecializationConstant, specConstant, value);
+
     public void Dispatch(StringName kernelName, uint xInvocations, uint yInvocations, uint zInvocations, Godot.Collections.Dictionary<StringName, Variant> pushConstants = null) => Inner.Call(MethodName.Dispatch, kernelName, xInvocations, yInvocations, zInvocations, pushConstants ?? new Godot.Collections.Dictionary<StringName, Variant>());
+
+    public void DispatchWorkgroups(StringName kernelName, uint xWorkgroups, uint yWorkgroups, uint zWorkgroups, Godot.Collections.Dictionary<StringName, Variant> pushConstants = null) => Inner.Call(MethodName.DispatchWorkgroups, kernelName, xWorkgroups, yWorkgroups, zWorkgroups, pushConstants ?? new Godot.Collections.Dictionary<StringName, Variant>());
+
+    public void DispatchIndirect(StringName kernelName, FSLBuffer commandBuffer, uint offset, Godot.Collections.Dictionary<StringName, Variant> pushConstants = null) => Inner.Call(MethodName.DispatchIndirect, kernelName, commandBuffer?.Inner, offset, pushConstants ?? new Godot.Collections.Dictionary<StringName, Variant>());
 
     public FSLStorageBuffer GetStorageBuffer(StringName bufferName) => (FSLStorageBuffer)FSLResource.Wrap(Inner.Call(MethodName.GetStorageBuffer, bufferName).AsGodotObject());
 
@@ -53,7 +59,10 @@ public partial class ComputeGroup
         public static readonly StringName PrintInfo = "print_info";
         public static readonly StringName GetKernel = "get_kernel";
         public static readonly StringName AssignResource = "assign_resource";
+        public static readonly StringName SetSpecializationConstant = "set_specialization_constant";
         public static readonly StringName Dispatch = "dispatch";
+        public static readonly StringName DispatchWorkgroups = "dispatch_workgroups";
+        public static readonly StringName DispatchIndirect = "dispatch_indirect";
         public static readonly StringName GetStorageBuffer = "get_storage_buffer";
         public static readonly StringName GetUniformBuffer = "get_uniform_buffer";
         public static readonly StringName GetVertexBuffer = "get_vertex_buffer";

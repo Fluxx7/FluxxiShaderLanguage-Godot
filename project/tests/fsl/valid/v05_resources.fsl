@@ -8,34 +8,34 @@
 // and globalScale).
 
 layout(std140) buffer paramBlock {
-    float4 tint;
-    uint count;
+    f32x4 tint;
+    u32 count;
 } params;
 
 layout(std430) buffer dataBlock {
-    float[] data;
+    f32[] data;
 };
 
-layout(vertex) buffer meshVerts {
-    float3 position;
-    float2 uv;
+layout(std430) buffer meshVerts : godot_vertex {
+    f32x3 position;
+    f32x2 uv;
 };
 
-layout(index) buffer meshIndices {
-    uint index;
+layout(std430) buffer meshIndices : godot_index {
+    u32 index;
 };
 
 layout(rgba32f) uniform image2D outImage;
 layout(rgba16f) uniform image2DArray layerImage;
 
-uniform float globalScale;
+uniform f32 globalScale;
 
 kernel[64, 1, 1] resKernelA(id : GlobalInvocationID) {
-    data[id.x] = float(id.x) * globalScale;
+    data[id.x] = f32(id.x) * globalScale;
 }
 
 kernel[8, 8, 1] resKernelB(id : GlobalInvocationID) {
     if (id.x >= params.count) return;
-    float4 px = imageLoad(layerImage, int3(int(id.x), int(id.y), 0)) * params.tint;
-    imageStore(outImage, int2(id.xy), px);
+    f32x4 px = imageLoad(layerImage, i32x3(i32(id.x), i32(id.y), 0)) * params.tint;
+    imageStore(outImage, i32x2(id.xy), px);
 }

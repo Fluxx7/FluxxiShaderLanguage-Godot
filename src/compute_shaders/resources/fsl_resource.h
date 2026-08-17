@@ -26,19 +26,27 @@ struct TextureInfo {
 
 struct BufferFieldInfo {
     FSLType type;
-    uint32_t offset;
     LocalVector<uint32_t> dimensions;
 };
 struct BufferInfo {
+    enum BufferSpecialization {
+        NONE,
+        GODOT_VERTEX,
+        GODOT_INDEX
+    };
     BufferType type;
     BufferFormat format;
-    bool has_unsized_field = false;
+    uint32_t base_size_bytes;
+    uint32_t tail_stride = 0;
     HashMap<StringName, BufferFieldInfo> fields;
+    BufferSpecialization specialization = NONE;
+    LocalVector<RenderingDevice::StorageBufferUsage> usage_flags;
 };
 
 enum ResourceType {
     RESTYPE_BUFFER,
-    RESTYPE_TEXTURE
+    RESTYPE_TEXTURE,
+    RESTYPE_UNIFORM
 };
 
 struct ResourceInfo {
