@@ -44,6 +44,12 @@ public partial class ComputeKernel
 
     public void DispatchWorkgroups(uint xWorkgroups, uint yWorkgroups, uint zWorkgroups, Godot.Collections.Dictionary<StringName, Variant> pushConstants = null) => Inner.Call(MethodName.DispatchWorkgroups, xWorkgroups, yWorkgroups, zWorkgroups, pushConstants ?? new Godot.Collections.Dictionary<StringName, Variant>());
 
+    public void DispatchIndirect(FSLBuffer commandBuffer, uint offset, Godot.Collections.Dictionary<StringName, Variant> pushConstants = null) => Inner.Call(MethodName.DispatchIndirect, commandBuffer?.Inner, offset, pushConstants ?? new Godot.Collections.Dictionary<StringName, Variant>());
+
+    public Variant GetSpecializationConstantValue(StringName specConstant) => Inner.Call(MethodName.GetSpecializationConstantValue, specConstant).As<Variant>();
+
+    public void SetSpecializationConstant(StringName specConstant, Variant value) => Inner.Call(MethodName.SetSpecializationConstant, specConstant, value);
+
     public void AssignResource(FSLResource resource, StringName resourceName) => Inner.Call(MethodName.AssignResource, resource?.Inner, resourceName);
 
     public FSLStorageBuffer GetStorageBuffer(StringName bufferName) => (FSLStorageBuffer)FSLResource.Wrap(Inner.Call(MethodName.GetStorageBuffer, bufferName).AsGodotObject());
@@ -65,6 +71,9 @@ public partial class ComputeKernel
         public static readonly StringName PrintInfo = "print_info";
         public static readonly StringName Dispatch = "dispatch";
         public static readonly StringName DispatchWorkgroups = "dispatch_workgroups";
+        public static readonly StringName DispatchIndirect = "dispatch_indirect";
+        public static readonly StringName GetSpecializationConstantValue = "get_specialization_constant_value";
+        public static readonly StringName SetSpecializationConstant = "set_specialization_constant";
         public static readonly StringName AssignResource = "assign_resource";
         public static readonly StringName GetStorageBuffer = "get_storage_buffer";
         public static readonly StringName GetUniformBuffer = "get_uniform_buffer";

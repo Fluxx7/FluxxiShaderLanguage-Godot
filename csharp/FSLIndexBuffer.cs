@@ -15,13 +15,13 @@ public partial class FSLIndexBuffer : FSLBuffer
 
     public FSLIndexBuffer() : this(ClassDB.Instantiate(GDClassName).AsGodotObject()) { }
 
-    public void SetField(StringName field, Variant value) => Inner.Call(MethodName.SetField, field, value);
+    public void SetIndexCount(uint numIndices) => Inner.Call(MethodName.SetIndexCount, numIndices);
 
-    public void SetBuffer(Godot.Collections.Dictionary<StringName, Variant> values) => Inner.Call(MethodName.SetBuffer, values);
+    public void SetIndexFormat(RenderingDevice.IndexBufferFormat newFormat) => Inner.Call(MethodName.SetIndexFormat, (long)newFormat);
 
     public new static class MethodName
     {
-        public static readonly StringName SetField = "set_field";
-        public static readonly StringName SetBuffer = "set_buffer";
+        public static readonly StringName SetIndexCount = "set_index_count";
+        public static readonly StringName SetIndexFormat = "set_index_format";
     }
 }

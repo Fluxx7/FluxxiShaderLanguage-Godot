@@ -26,15 +26,17 @@ public partial class ComputePlan
     /// <summary>Wraps a GDExtension object in the most-derived C# wrapper for its Godot class.</summary>
     public static ComputePlan Wrap(GodotObject inner) => inner == null ? null : new ComputePlan(inner);
 
-    public static ComputePlan MakeNew(RenderingDevice renderingDevice) => ComputePlan.Wrap(ClassDB.ClassCallStatic(GDClassName, MethodName.MakeNew, renderingDevice).AsGodotObject());
+    public static ComputePlan MakeNew(RenderingDevice renderingDevice = null) => ComputePlan.Wrap(ClassDB.ClassCallStatic(GDClassName, MethodName.MakeNew, renderingDevice).AsGodotObject());
 
     public ComputePlan AddBarrier(bool isTemp = false) => ComputePlan.Wrap(Inner.Call(MethodName.AddBarrier, isTemp).AsGodotObject());
 
     public ComputePlan AddKernel(ComputeKernel kernel, uint xInvocations, uint yInvocations, uint zInvocations, Godot.Collections.Dictionary<StringName, Variant> pushConstants = null, bool isTemp = false) => ComputePlan.Wrap(Inner.Call(MethodName.AddKernel, kernel?.Inner, xInvocations, yInvocations, zInvocations, pushConstants ?? new Godot.Collections.Dictionary<StringName, Variant>(), isTemp).AsGodotObject());
 
-    public void AddPlan(ComputePlan subplan, bool isTemp = false) => Inner.Call(MethodName.AddPlan, subplan?.Inner, isTemp);
-
     public ComputePlan AddKernelWorkgroups(ComputeKernel kernel, uint xWorkgroups, uint yWorkgroups, uint zWorkgroups, Godot.Collections.Dictionary<StringName, Variant> pushConstants = null, bool isTemp = false) => ComputePlan.Wrap(Inner.Call(MethodName.AddKernelWorkgroups, kernel?.Inner, xWorkgroups, yWorkgroups, zWorkgroups, pushConstants ?? new Godot.Collections.Dictionary<StringName, Variant>(), isTemp).AsGodotObject());
+
+    public ComputePlan AddKernelIndirect(ComputeKernel kernel, FSLBuffer commandBuffer, uint offset, Godot.Collections.Dictionary<StringName, Variant> pushConstants = null, bool isTemp = false) => ComputePlan.Wrap(Inner.Call(MethodName.AddKernelIndirect, kernel?.Inner, commandBuffer?.Inner, offset, pushConstants ?? new Godot.Collections.Dictionary<StringName, Variant>(), isTemp).AsGodotObject());
+
+    public void AddPlan(ComputePlan subplan, bool isTemp = false) => Inner.Call(MethodName.AddPlan, subplan?.Inner, isTemp);
 
     public void Dispatch() => Inner.Call(MethodName.Dispatch);
 
@@ -43,8 +45,9 @@ public partial class ComputePlan
         public static readonly StringName MakeNew = "make_new";
         public static readonly StringName AddBarrier = "add_barrier";
         public static readonly StringName AddKernel = "add_kernel";
-        public static readonly StringName AddPlan = "add_plan";
         public static readonly StringName AddKernelWorkgroups = "add_kernel_workgroups";
+        public static readonly StringName AddKernelIndirect = "add_kernel_indirect";
+        public static readonly StringName AddPlan = "add_plan";
         public static readonly StringName Dispatch = "dispatch";
     }
 }
