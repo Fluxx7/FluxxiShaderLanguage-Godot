@@ -51,3 +51,4 @@ String gen_binding_code(const String& name, const String& bound_name);
 String tex_to_glsl_name(const TextureType &tex_type);
 
 Pair<TextureInfo, String> texture_to_glsl(const String &texture_name, const AST::TextureDef &texture);
+Pair<SamplerInfo, String> sampler_to_glsl(const String &sampler_name, const AST::SamplerDef &sampler);

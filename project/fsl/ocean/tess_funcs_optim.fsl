@@ -1,4 +1,13 @@
+#include "complex.fsl"
 #include "shared_resources.fsl"
+
+/* 
+define this to use the negative spectrum for wave propagation instead of the 
+complex conjugate of the positive spectrum, as described in the Horvath paper
+
+Note that the negative spectrum is currently implemented incorrectly, so it kinda breaks everything lol
+*/
+//define USE_HORVATH_NEGATIVE_SPECTRUM
 
 #define time_cycle 1024.0
 
@@ -18,37 +27,38 @@ since we are running a one-dimensional FFT on each row, we index row-major
 to make this easier, the macro fft_index handles everything automatically.
 the arguments are the x coordinate, the y coordinate, and then which of the two arrays to access 
 */
-layout(std430) buffer fft1_buffers {
+buffer["fft1_buffers"] {
     f32x2[] fft1_data;
 };
 #define fft1_index(x, y) fft1_data[(cascade_index * texSize + y ) * texSize + x ] 
 #define fft1_vindex(v) fft1_index(v.x, v.y)
 
-layout(std430) buffer fft2_buffers {
+buffer["fft2_buffers"] {
     f32x2[] fft2_data;
 };
 
 #define fft2_index(x, y) fft2_data[(cascade_index * texSize + y ) * texSize + x ] 
 #define fft2_vindex(v) fft2_index(v.x, v.y)
 
-layout(std430) buffer fft3_buffers {
+buffer["fft3_buffers"] {
     f32x2[] fft3_data;
 };
 
 #define fft3_index(x, y) fft3_data[(cascade_index * texSize + y ) * texSize + x ] 
 #define fft3_vindex(v) fft3_index(v.x, v.y)
 
-layout(std430) buffer fft4_buffers {
+buffer["fft4_buffers"] {
     f32x2[] fft4_data;
 };
 
 #define fft4_index(x, y) fft4_data[(cascade_index * texSize + y ) * texSize + x ] 
 #define fft4_vindex(v) fft4_index(v.x, v.y)
 
-kernel[8, 8, 1] updateSpectrum(g_id : GlobalInvocationID, i32 texSize, f32 time) {
-	if (g_id.x >= texSize) return;
-	if (g_id.y >= texSize) return;
+kernel[8, 8, 1] updateSpectrum(g_id : GlobalInvocationID, f32 time) {
+	if (g_id.x >= N) return;
+	if (g_id.y >= N) return;
 	if (g_id.z >= paramsBuffer.numCascades) return;
+	const i32 texSize = i32(N);
 	const i32x2 id = i32x2(g_id.xy);
 	const i32 cascade_index = i32(g_id.z);
 	const f32x2 j = f32x2(0.0, 1.0);
@@ -58,8 +68,12 @@ kernel[8, 8, 1] updateSpectrum(g_id : GlobalInvocationID, i32 texSize, f32 time)
 	f32 coeff = 2.0 * PI / tile_length;
 	const f32x2 f_kterm = (id - texSize * 0.5) * coeff;
 	
-	const f32x2 Hnaught = imageLoad(baseSpectrum, i32x3(id, cascade_index)).xy;
-	const f32x2 Hnaught_star = complex_conj(imageLoad(baseSpectrum, i32x3((i32x2(texSize, texSize) - id) & (texSize - 1), cascade_index)).xy);
+	const f32x2 Hnaught = baseSpectrum[i32x3(id, cascade_index)].xy;
+#ifdef USE_HORVATH_NEGATIVE_SPECTRUM
+	const f32x2 Hnaught_star = baseSpectrum[i32x3((i32x2(texSize, texSize) - id) & (texSize - 1), cascade_index)].zw;
+#else
+	const f32x2 Hnaught_star = complex_conj(baseSpectrum[i32x3((i32x2(texSize, texSize) - id) & (texSize - 1), cascade_index)].xy);
+#endif
 	const f32 k_mag = length(f_kterm);
 
 	const f32x2 exp_dispersion = exp_j(time * dispersion_relation_quant(k_mag, depth));
@@ -69,7 +83,7 @@ kernel[8, 8, 1] updateSpectrum(g_id : GlobalInvocationID, i32 texSize, f32 time)
 		k_unit = f_kterm / k_mag;
 	}
 	// this image is only for debugging and should be removed for "production"
-	imageStore(spectrumTexture, i32x3(id, cascade_index), f32x4(H_tilde, 0.0, 1.0));
+	spectrumTexture[i32x3(id, cascade_index)] = f32x4(H_tilde, 0.0, 1.0);
 
 	const f32x2 jH = complex_mult(j, H_tilde);
 
@@ -98,14 +112,14 @@ kernel[8, 8, 1] updateSpectrum(g_id : GlobalInvocationID, i32 texSize, f32 time)
 }
 
 
-layout(rgba16f) uniform image2DArray heightTexture;
-layout(rgba16f) uniform image2DArray gradientTexture;
-layout(rgba16f) uniform image2DArray foamTexture;
+uniform image2DArray<f16x4> heightTexture;
+uniform image2DArray<f16x4> gradFoamTexture;
 
-kernel[8, 8, 1] ifftUnpack(g_id : GlobalInvocationID, i32 texSize, f32 deltaTime) {
-	if (g_id.x >= texSize) return;
-	if (g_id.y >= texSize) return;
+kernel[8, 8, 1] ifftUnpack(g_id : GlobalInvocationID, f32 deltaTime) {
+	if (g_id.x >= N) return;
+	if (g_id.y >= N) return;
 	if (g_id.z >= paramsBuffer.numCascades) return;
+	const i32 texSize = i32(N);
 	i32x2 id = i32x2(g_id.xy);
 	const i32 cascade_index = i32(g_id.z);
 	
@@ -121,10 +135,9 @@ kernel[8, 8, 1] ifftUnpack(g_id : GlobalInvocationID, i32 texSize, f32 deltaTime
 	f32 dx_dx = fft4_sample.x * sign_shift;
 	f32 dz_dz = fft4_sample.y * sign_shift;
 
-	gradients = gradients / (1.0 + abs(vec2(dx_dx, dz_dz)));
+	gradients = gradients / (1.0 + abs(f32x2(dx_dx, dz_dz)));
 	
-	imageStore(heightTexture, i32x3(id, cascade_index), f32x4(displacement * sign_shift, 1.0));
-	imageStore(gradientTexture, i32x3(id, cascade_index), f32x4(gradients.x, 0.0, gradients.y, 1.0) );
+	heightTexture[cascade_index][id] = f32x4(displacement * sign_shift, 1.0);
 
 	f32 jacobian = (dx_dx + 1.0) * (dz_dz + 1.0) - dx_dz * dx_dz;
 
@@ -134,13 +147,11 @@ kernel[8, 8, 1] ifftUnpack(g_id : GlobalInvocationID, i32 texSize, f32 deltaTime
 	const f32 foam_decay_rate = deltaTime * max(0.5, 10.0 - foam_amount) * 0.15;
 	
 	f32 foam_factor = -min(0.0, jacobian - whitecap);
-	f32 foam = imageLoad(foamTexture, i32x3(id, cascade_index)).x;
+	f32 foam = gradFoamTexture[cascade_index][id].y;
 	foam *= exp(-foam_decay_rate);
 	foam += foam_factor * foam_grow_rate;
 	foam = clamp(foam, 0.0f, 1.0f);
-	imageStore(foamTexture, i32x3(id, cascade_index), f32x4(foam, foam, foam, 1.0));
+	gradFoamTexture[cascade_index][id] = f32x4(gradients.x, foam, gradients.y, 1.0);
 }
-
-
 
 

@@ -6,7 +6,7 @@
 // buffer write (exercises transitive resource propagation through the call
 // graph: funcKernel must bind fnBuf even though it never touches it directly).
 
-layout(std430) buffer fnBuf {
+buffer["fnBuf"] {
     f32[] fn_out;
 };
 

@@ -78,7 +78,13 @@ import json
 csharp_manifest = "bindings/csharp_manifest.json"
 csharp_outdir = "{}/csharp".format(addondir)
 with open(csharp_manifest) as manifest_file:
-    csharp_classes = list(json.load(manifest_file)["classes"].keys())
+    csharp_manifest_classes = json.load(manifest_file)["classes"]
+# One file per class, plus a "<Root>Factory" holding each hierarchy's Wrap().
+csharp_classes = list(csharp_manifest_classes.keys()) + [
+    "{}Factory".format(cls)
+    for cls, spec in csharp_manifest_classes.items()
+    if spec.get("extends") is None
+]
 csharp_sources = env.Command(
     ["{}/{}.cs".format(csharp_outdir, cls) for cls in csharp_classes],
     [csharp_manifest, "bindings/generate_csharp_bindings.py"],

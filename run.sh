@@ -5,13 +5,21 @@
 #   ./run.sh [seconds]            # windowed: real RenderingDevice, like the editor
 #   ./run.sh [seconds] --headless # dummy renderer, no GPU (compute will not work)
 #
-# Output is teed to /tmp/godot_run.log. Override Godot with GODOT=/path ./run.sh
+# Defaults to the Godot 4.8 fork the extension is compiled against; a stock
+# 4.7 install will not load the GDExtension. Override with GODOT=/path ./run.sh
+#
+# Output is teed to /tmp/godot_run.log.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-GODOT="${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}"
+GODOT="${GODOT:-/Users/nicholas/Godot/Godot Compilations/Godot 4.8 Fork.app/Contents/MacOS/Godot}"
 QUIT_AFTER="${1:-5}"
 LOG="/tmp/godot_run.log"
+
+if [ ! -x "$GODOT" ]; then
+    echo "error: Godot binary not found at '$GODOT' (set \$GODOT to override)" >&2
+    exit 1
+fi
 
 ARGS=(--path project --quit-after "$QUIT_AFTER")
 if [ "${2:-}" = "--headless" ]; then

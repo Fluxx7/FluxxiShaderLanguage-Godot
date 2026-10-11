@@ -28,6 +28,7 @@ void initialize_gdextension_types(ModuleInitializationLevel p_level)
 	GDREGISTER_ABSTRACT_CLASS(FSLResource);
 	GDREGISTER_ABSTRACT_CLASS(FSLBuffer);
 	GDREGISTER_ABSTRACT_CLASS(FSLTexture);
+	GDREGISTER_ABSTRACT_CLASS(FSLSamplerType);
 
 	GDREGISTER_CLASS(FSLUniformBuffer);
 	GDREGISTER_CLASS(FSLStorageBuffer);
@@ -37,6 +38,8 @@ void initialize_gdextension_types(ModuleInitializationLevel p_level)
 	GDREGISTER_CLASS(FSLTexture2D);
 	GDREGISTER_CLASS(FSLTexture2DArray);
 	GDREGISTER_CLASS(FSLTextureView);
+
+	GDREGISTER_CLASS(FSLSampler2DArray);
 
 	GDREGISTER_CLASS(FSLRawResource);
 }

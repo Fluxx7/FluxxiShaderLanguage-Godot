@@ -4,7 +4,7 @@
 
 const u32 x : totally_made_up_annotation = 1;
 
-layout(std430) buffer sinkBuf {
+buffer["sinkBuf"] {
     f32[] sink;
 };
 

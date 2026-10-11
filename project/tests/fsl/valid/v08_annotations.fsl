@@ -10,7 +10,7 @@
 const u32 fft_size : specialization_constant = 256;
 const u32 cascade_count : specialization_constant(3) = 4;
 
-layout(std430) buffer annBuf {
+buffer["annBuf"] {
     f32[] ann_out;
 };
 

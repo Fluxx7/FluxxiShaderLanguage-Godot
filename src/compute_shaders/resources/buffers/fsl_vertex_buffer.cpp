@@ -4,6 +4,8 @@
 void FSLVertexBuffer::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_vertex_count", "num_vertices"), &FSLVertexBuffer::set_vertex_count);
     ClassDB::bind_method(D_METHOD("set_vertex_size_bytes", "vertex_size"), &FSLVertexBuffer::set_vertex_size_bytes);
+    ClassDB::bind_method(D_METHOD("set_buffer_bytes", "data", "offset", "num_bytes"), &FSLVertexBuffer::set_buffer_bytes, DEFVAL(0), DEFVAL(0));
+
 }
 
 
@@ -17,6 +19,10 @@ void FSLVertexBuffer::_rebuild() {
     rduniform->add_id(rid);
     emit_signal("rid_changed", rid);
     rebuilt = true;
+}
+
+uint32_t FSLVertexBuffer::get_size_bytes() {
+	return vertex_count * bytes_per_vertex;
 }
 
 void FSLVertexBuffer::_init_buffer() {
@@ -55,6 +61,14 @@ void FSLVertexBuffer::set_vertex_size_bytes(uint32_t vertex_size) {
         bytes_per_vertex = vertex_size;
         _rebuild();
     }
+}
+
+void FSLVertexBuffer::set_buffer_bytes(PackedByteArray data, uint32_t offset, uint32_t num_bytes) {
+    if (num_bytes == 0) num_bytes = data.size();
+    rd->buffer_update(rid, offset, num_bytes, data);
+}
+
+void FSLVertexBuffer::copy_vertices(Ref<FSLBuffer> dest, uint32_t num_vertices, uint32_t offset) {
 }
 
 Ref<RDUniform> FSLVertexBuffer::get_rd_uniform(uint32_t binding, bool &needs_rebuild) {

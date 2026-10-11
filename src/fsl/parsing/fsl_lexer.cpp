@@ -19,8 +19,8 @@ Token::TokenCategory get_category(Token::TokenType tok_type) {
         case Token::SYMBOL_EQUALS:
         case Token::SYMBOL_OR:
         case Token::SYMBOL_PLUS:
-        case Token::SYMBOL_LESSTHAN:
-        case Token::SYMBOL_GREATERTHAN:
+        case Token::SYMBOL_LEFTCARAT:
+        case Token::SYMBOL_RIGHTCARAT:
             return Token::CATEGORY_SYMBOL_OP;
 
         case Token::SYMBOL_COMMA:
@@ -43,6 +43,7 @@ Token::TokenCategory get_category(Token::TokenType tok_type) {
         case Token::SPECIFIER_OUT:
         case Token::SPECIFIER_INOUT:
         case Token::SPECIFIER_SHARED:
+        case Token::SPECIFIER_PRECISE:
             return Token::CATEGORY_SPECIFIER;
 
         
@@ -52,6 +53,9 @@ Token::TokenCategory get_category(Token::TokenType tok_type) {
         case Token::KEYWORD_RETURN:
         case Token::KEYWORD_DO:
         case Token::KEYWORD_SWITCH:
+        case Token::KEYWORD_BREAK:
+        case Token::KEYWORD_CASE:
+        case Token::KEYWORD_DEFAULT:
             return Token::CATEGORY_STATEMENT_KEYWORD;
 
         case Token::KEYWORD_KERNEL:
@@ -64,11 +68,10 @@ Token::TokenCategory get_category(Token::TokenType tok_type) {
 
         case Token::TYPE_IMAGE2D:
         case Token::TYPE_IMAGE2DARRAY:
-            return Token::CATEGORY_OPAQUE_TYPE;
-
-        case Token::TEXFORMAT_RGBA16F:
-        case Token::TEXFORMAT_RGBA32F:
-            return Token::CATEGORY_TEXTUREFORMAT;
+            return Token::CATEGORY_TEXTURE_TYPE;
+        case Token::TYPE_SAMPLER:
+        case Token::TYPE_SAMPLER2DARRAY:
+            return Token::CATEGORY_SAMPLER_TYPE;
 
         case Token::BUFFORMAT_STD140:
         case Token::BUFFORMAT_STD430:
@@ -114,8 +117,8 @@ Token::TokenType to_symbol(char c) {
         case '=': return Token::SYMBOL_EQUALS;
         case '|': return Token::SYMBOL_OR;
         case '+': return Token::SYMBOL_PLUS;
-        case '<': return Token::SYMBOL_LESSTHAN;
-        case '>': return Token::SYMBOL_GREATERTHAN;
+        case '<': return Token::SYMBOL_LEFTCARAT;
+        case '>': return Token::SYMBOL_RIGHTCARAT;
         
         case ',': return Token::SYMBOL_COMMA;
         case '.': return Token::SYMBOL_PERIOD;
@@ -127,92 +130,8 @@ Token::TokenType to_symbol(char c) {
     }
 }
 
-Token::TokenType to_specifier(String identifier) {
-    static const char *specifier_strs[] = {
-        "in",
-        "out",
-        "inout",
-        "const",
-        "shared"
-    }; 
-    static const Token::TokenType specifiers[] = {
-        Token::SPECIFIER_IN,
-        Token::SPECIFIER_OUT,
-        Token::SPECIFIER_INOUT,
-        Token::SPECIFIER_CONST,
-        Token::SPECIFIER_SHARED
-    }; 
-    
-    int32_t curr_index = 0;
-    for (auto specifier_str : specifier_strs) {
-        if (identifier == specifier_str) {
-            return specifiers[curr_index];
-        }
-        curr_index++;
-    }
-    return Token::ERR_TOKEN;
-}
-
-Token::TokenType to_texture_format(String identifier) {
-    static const char *texture_format_strs[] = {
-        "rgba16f",
-        "rgba32f"
-    }; 
-    static const Token::TokenType texture_formats[] = {
-        Token::TEXFORMAT_RGBA16F,
-        Token::TEXFORMAT_RGBA32F
-    }; 
-    
-    uint32_t curr_index = 0;
-    for (auto texture_format_str : texture_format_strs) {
-        if (identifier == texture_format_str) {
-            return texture_formats[curr_index];
-        }
-        curr_index++;
-    }
-    return Token::ERR_TOKEN;
-}
-
-Token::TokenType get_opaque_type(const String& identifier) {
-    static const char *opaque_type_strs[] = {
-        "image2D",
-        "image2DArray"
-    }; 
-    static const Token::TokenType opaque_types[] = {
-        Token::TYPE_IMAGE2D,
-        Token::TYPE_IMAGE2DARRAY
-    };
-    uint32_t curr_index = 0;
-    for (auto complex_type : opaque_type_strs) {
-        if (identifier == complex_type) {
-            return opaque_types[curr_index];
-        }
-        curr_index++;
-    }
-    return Token::ERR_TOKEN;
-}
-
-Token::TokenType to_buffer_format(const String &identifier) {
-    static const char *buffer_format_strs[] = {
-        "std140",
-        "std430"
-    }; 
-    static const Token::TokenType buffer_formats[] = {
-        Token::BUFFORMAT_STD140,
-        Token::BUFFORMAT_STD430
-    }; 
-    uint32_t curr_index = 0;
-    for (auto buffer_format_str : buffer_format_strs) {
-        if (identifier == buffer_format_str) {
-            return buffer_formats[curr_index];
-        }
-        curr_index++;
-    }
-    return Token::ERR_TOKEN;
-}
-
 Token::TokenType get_token_type(String token_string) {
-    static const HashMap<StringName, Token::TokenType> keyword_strs = {
+    static const HashMap<StringName, Token::TokenType> reserved_words = {
         {"kernel", Token::KEYWORD_KERNEL},
         {"layout", Token::KEYWORD_LAYOUT},
 
@@ -229,27 +148,33 @@ Token::TokenType get_token_type(String token_string) {
         {"buffer", Token::KEYWORD_BUFFER},
         {"return", Token::KEYWORD_RETURN},
         {"struct", Token::KEYWORD_STRUCT},
-        {"void", Token::KEYWORD_VOID}
+        {"case", Token::KEYWORD_CASE},
+        {"default", Token::KEYWORD_DEFAULT},
+        {"void", Token::KEYWORD_VOID},
+
+        {"in", Token::SPECIFIER_IN},
+        {"out", Token::SPECIFIER_OUT},
+        {"inout", Token::SPECIFIER_INOUT},
+        {"const", Token::SPECIFIER_CONST},
+        {"shared", Token::SPECIFIER_SHARED},
+        {"precise", Token::SPECIFIER_PRECISE},
+
+        {"true", Token::LITERAL},
+        {"false", Token::LITERAL},
+
+        {"std140", Token::BUFFORMAT_STD140},
+        {"std430", Token::BUFFORMAT_STD430},
+        {"rgba16f", Token::TEXFORMAT_RGBA16F},
+        {"rgba32f", Token::TEXFORMAT_RGBA32F},
+        
+        {"image2D", Token::TYPE_IMAGE2D},
+        {"image2DArray", Token::TYPE_IMAGE2DARRAY},
+        {"sampler", Token::TYPE_SAMPLER},
+        {"sampler2DArray", Token::TYPE_SAMPLER2DARRAY},
     };
 
-    if (keyword_strs.has(token_string)) {
-        return keyword_strs[token_string];
-    }
-
-    if (auto complex_type = get_opaque_type(token_string); complex_type != Token::ERR_TOKEN) {
-        return complex_type;
-    }
-
-    if (auto specifier = to_specifier(token_string); specifier != Token::ERR_TOKEN) {
-        return specifier;
-    }
-
-    if (auto tex_format = to_texture_format(token_string); tex_format != Token::ERR_TOKEN) {
-        return tex_format;
-    }
-
-    if (auto buf_format = to_buffer_format(token_string); buf_format != Token::ERR_TOKEN) {
-        return buf_format;
+    if (reserved_words.has(token_string)) {
+        return reserved_words[token_string];
     }
 
     if (token_string.is_valid_int()) {

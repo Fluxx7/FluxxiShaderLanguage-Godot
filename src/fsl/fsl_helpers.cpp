@@ -12,6 +12,8 @@ String specifier_to_string(FSLSpecifier specifier) {
             return "const";
         case SPECIFIER_SHARED:
             return "shared";
+        case SPECIFIER_PRECISE:
+            return "precise";
     }
 }
 
@@ -300,7 +302,7 @@ FSLLayout get_fsl_base_type_layout(const FSLBaseType& base_type, BufferFormat fo
     match(base_type, 
         [&](const FSLCoreType &core_type) {
             uint32_t primitive_size = get_fsl_primitive_size(core_type.primitive);
-            layout.size = primitive_size * core_type.vec_size;
+            layout.size = primitive_size * core_type.vec_size * core_type.mat_size;
             uint32_t vec_coeff = core_type.vec_size == 3 ? 4 : core_type.vec_size;
             layout.alignment = primitive_size * vec_coeff;
         },
@@ -336,9 +338,10 @@ FSLLayout get_fsl_type_layout(const FSLType& fsl_type, uint32_t unsized_count, B
         },
         [&](const FSLArray &array) {
             layout = get_fsl_base_type_layout(array.base_type, format);
-            if (format == STD140 && layout.alignment < 16) {
-                layout.alignment = 16;
+            if (format == STD140) {
+                if (layout.alignment < 16) layout.alignment = 16;
             }
+            // TODO: handle stride properly
             for (const auto& array_size : array.dimensions) {
                 if (array_size > 0) {
                     layout.size *= array_size;
@@ -349,130 +352,4 @@ FSLLayout get_fsl_type_layout(const FSLType& fsl_type, uint32_t unsized_count, B
         });
 
 	return layout;
-}
-
-PackedByteArray fsl_core_type_to_bytes(const FSLCoreType &core_type, Variant value) {
-    PackedByteArray out_bytes = {};
-    uint32_t core_size = get_fsl_primitive_size(core_type.primitive) * core_type.vec_size;
-    out_bytes.resize(core_size);
-    if (core_type.vec_size == ONE) {
-        switch (core_type.primitive) {
-            case F16:
-                out_bytes.encode_half(0, (double) value);
-                break;
-            case F32:
-                out_bytes.encode_float(0, (float) value);
-                break;
-            case F64:
-                out_bytes.encode_double(0, (double) value);
-                break;
-            case U8:
-                out_bytes.encode_u8(0, (uint32_t) value);
-                break;
-            case U16:
-                out_bytes.encode_u16(0, (uint32_t) value);
-                break;
-            case U32:
-                out_bytes.encode_u32(0, (uint32_t) value);
-                break;
-            case U64:
-                out_bytes.encode_u64(0, (uint32_t) value);
-                break;
-            case I8:
-                out_bytes.encode_s8(0, (int32_t) value);
-                break;
-            case I16:
-                out_bytes.encode_s16(0, (int32_t) value);
-                break;
-            case I32:
-                out_bytes.encode_s32(0, (int32_t) value);
-                break;
-            case I64:
-                out_bytes.encode_s64(0, (int32_t) value);
-                break;
-            case BOOL:
-                out_bytes.encode_u32(0, (uint32_t) value);
-                break;
-            default:
-                break;
-        }
-    } else {
-        uint32_t stride = get_fsl_primitive_size(core_type.primitive);
-        for (int i = 0; i < (int) core_type.vec_size; i++) {
-            uint32_t offset = stride * i;
-            switch (core_type.primitive) {
-                case F16:
-                    out_bytes.encode_half(offset, (float) value);
-                    break;
-                case F32:
-                    out_bytes.encode_float(offset, (float) value);
-                    break;
-                case F64:
-                    out_bytes.encode_double(offset, (double) value);
-                    break;
-                case U8:
-                    out_bytes.encode_u8(offset, (uint32_t) value);
-                    break;
-                case U16:
-                    out_bytes.encode_u16(offset, (uint32_t) value);
-                    break;
-                case U32:
-                    out_bytes.encode_u32(offset, (uint32_t) value);
-                    break;
-                case U64:
-                    out_bytes.encode_u64(offset, (uint32_t) value);
-                    break;
-                case I8:
-                    out_bytes.encode_s8(offset, (int32_t) value);
-                    break;
-                case I16:
-                    out_bytes.encode_s16(offset, (int32_t) value);
-                    break;
-                case I32:
-                    out_bytes.encode_s32(offset, (int32_t) value);
-                    break;
-                case I64:
-                    out_bytes.encode_s64(offset, (int32_t) value);
-                    break;
-                case BOOL:
-                    out_bytes.encode_u32(offset, (uint32_t) value);
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
-	return out_bytes;
-}
-
-PackedByteArray fsl_base_type_to_bytes(const FSLBaseType &base_type, Variant value) {
-    PackedByteArray out_bytes = {};
-    match(base_type, 
-        [&](const FSLCoreType &core_type) {
-            out_bytes = fsl_core_type_to_bytes(core_type, value);
-        },
-        [&](const FSLStruct &fsl_struct) {
-            for (const auto& field : fsl_struct.fields) {
-                
-            }
-        });
-	return out_bytes;
-}
-
-PackedByteArray fsl_type_to_bytes(const FSLType &fsl_type, Variant value) {
-    PackedByteArray out_bytes = {};
-    match(fsl_type, 
-        [&](const FSLBaseType &base_type) {
-            out_bytes = fsl_base_type_to_bytes(base_type, value);
-        },
-        [&](const FSLArray &array) {
-            Array array_val = (Array) value;
-            if (array_val.size() == 0) {
-                ERR_PRINT("Invalid or empty array provided");
-                return;
-            }
-            for (const auto& item : array_val) {
-            }
-        });
-	return out_bytes;
 }

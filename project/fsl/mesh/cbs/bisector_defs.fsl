@@ -1,0 +1,149 @@
+#include "cbtree_defs.fsl"
+#include "../mesh_common.fsl"
+#include "cbs_indirect_helpers.fsl"
+
+struct HalfEdge {
+    i32 twin;
+    i32 next;
+    i32 prev;
+    i32 vert;
+    i32 edge;
+    i32 face;
+};
+
+buffer["HalfEdgeBuffer"] {
+	u32 num_half_edges;
+    HalfEdge[] half_edges;
+};
+
+struct Bisector {
+	i32 state;
+	i32 flags;
+	i32 subdiv_pattern;
+	i32 problematic_neighbor;
+    i32x3 mem_slots;
+    i32 root_index;
+};
+
+struct Neighbors {
+	i32 prev;
+	i32 next;
+	i32 twin;	
+};
+
+buffer["VertexCountBuffer"] {
+	u32 num_vertices;
+	u32[] vertex_indices;
+};
+
+buffer["BisectorBuffer"] {
+	u32 num_bisectors;	
+    Bisector[] bisectors;
+};
+
+buffer["BisectorIndicesBuffer"] {
+    i32x4[] bisector_indices;
+};
+
+buffer["BisectorIDBuffer"] {
+    u64[] bisector_ids;
+};
+
+buffer["NeighborsBuffer"] {
+	Neighbors[] neighbors;
+};
+
+buffer["NeighborsCopyBuffer"] {
+	Neighbors[] neighbors_copy;
+};
+
+buffer["SplitBisectors"] splitBisectors {
+	u32 count;
+	i32[] indices;
+};
+
+buffer["AllocatingBisectors"] allocatingBisectors {
+	u32 count;
+	i32[] indices;
+};
+
+buffer["MergeBisectors"] mergeBisectors{
+	u32 count;
+	i32[] indices;
+};
+
+buffer["SimplifyingBisectors"] simplifyingBisectors {
+	u32 count;
+	i32[] indices;
+};
+
+buffer["PropagatingBisectors"] propagatingBisectors {
+	u32 count_split;
+	u32 count_merge;
+	i32[] indices;
+};
+
+buffer["ModifiedBisectors"] modifiedBisectors {
+	u32 count;
+	i32[] indices;
+};
+
+
+f32x3 vertex_to_f32x3(Vertex vertex) {
+	return f32x3(vertex.x, vertex.y, vertex.z);
+}
+
+Vertex f32x3_to_vertex(f32x3 vertex_src) {
+	return Vertex(vertex_src.x, vertex_src.y, vertex_src.z);	
+}
+
+#define SPLIT_TWIN 1
+#define SPLIT_PREV 2
+#define SPLIT_NEXT 4
+
+#define STATE_UNCHANGED 0
+#define STATE_BISECT 1
+#define STATE_SIMPLIFY 2
+#define STATE_MERGED 3
+
+#define FLAG_NONE 0
+#define FLAG_UPDATE 1
+#define FLAG_SMALLEST 2
+
+bool has_flag(i32 command, i32 flag) {
+	return (command & flag) != 0;	
+}
+
+i32 get_nth_high_bit(u32 index) {
+	i32 bitID = 1;
+	while (bitID < cbt_capacity) {
+		bitID *= 2;
+		if (index >= cbtree.data[bitID]) {
+			index -= cbtree.data[bitID];
+			bitID++;
+		}
+	}
+	return bitID - i32(cbt_capacity);
+}
+
+
+i32 get_depth(u64 b_id) {
+	return i32(findMSB(b_id) - id_depth_offset);
+}
+
+i32 load_depth(i32 b_index) {
+	return get_depth(bisector_ids[b_index]);
+}
+
+
+f32x4x3 bisector_vertices(i32 b_index) {
+	i32x4 indices = bisector_indices[b_index];
+	f32x3 v0 = vertex_to_f32x3(vertex_buffer.data[indices[0]]);
+	f32x3 v1 = vertex_to_f32x3(vertex_buffer.data[indices[1]]);
+	f32x3 v2 = vertex_to_f32x3(vertex_buffer.data[indices[2]]);
+	f32x3 vp = f32x3(0);
+	if (load_depth(b_index) > 0) {
+		vp = vertex_to_f32x3(vertex_buffer.data[indices[3]]);
+	}
+	return f32x4x3(v0, v1, v2, vp);
+}

@@ -117,6 +117,7 @@ namespace AST {
         ElseNode _parse_else_statement(TokenStream&& stream);
         ForNode _parse_for_statement(TokenStream&& stream);
         WhileNode _parse_while_statement(TokenStream&& stream);
+        SwitchNode _parse_switch_statement(TokenStream&& stream);
 
         VariableDecl _parse_var_decl(Slice<TokenTree> tokens) {
             return _parse_var_decl(tokens.get_stream());
@@ -147,8 +148,9 @@ namespace AST {
         FunctionDecl _parse_func_decl(Slice<TokenTree> tokens);
         StructDecl _parse_struct_decl(TokenStream&& stream);        
 
-        void _parse_texture(const Token* layout_token, TokenStream& stream, ResourceNode& res_node);
-        void _parse_buffer(const Token* layout_token, TokenStream& stream, ResourceNode& res_node);
+        void _parse_sampler(TokenStream& stream, ResourceNode& res_node);
+        void _parse_texture(TokenStream& stream, ResourceNode& res_node);
+        void _parse_buffer(TokenStream&& stream, ResourceNode& res_node, bool is_uniform);
         ResourceNode _parse_resource(Slice<TokenTree> tokens);
 
         KernelNode _parse_kernel(Slice<TokenTree> tokens);

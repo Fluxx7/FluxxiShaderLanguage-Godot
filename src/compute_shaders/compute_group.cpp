@@ -21,6 +21,8 @@ void ComputeGroup::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_texture_2d", "texture_name"), &ComputeGroup::get_texture_2d);
     ClassDB::bind_method(D_METHOD("get_texture_2d_array", "texture_name"), &ComputeGroup::get_texture_2d_array);
 
+    ClassDB::bind_method(D_METHOD("get_sampler_2d_array", "sampler_name"), &ComputeGroup::get_sampler_2d_array);
+
     ClassDB::bind_method(D_METHOD("get_resource", "resource_name"), &ComputeGroup::get_resource);
 }
 
@@ -131,6 +133,10 @@ Ref<FSLTexture2D> ComputeGroup::get_texture_2d(const StringName &texture_name) {
 
 Ref<FSLTexture2DArray> ComputeGroup::get_texture_2d_array(const StringName &texture_name) {
 	return _get_resource_typed<FSLTexture2DArray>(texture_name);
+}
+
+Ref<FSLSampler2DArray> ComputeGroup::get_sampler_2d_array(const StringName &sampler_name) {
+	return _get_resource_typed<FSLSampler2DArray>(sampler_name);
 }
 
 // -- GENERIC --

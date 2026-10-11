@@ -1,7 +1,7 @@
 //! EXPECT: valid
 //! KERNELS: crlfKernel
 // CRLF line endings throughout, and no trailing newline on the last line.
-layout(std430) buffer crlfBuf {
+buffer["crlfBuf"] {
     f32[] crlf_out;
 };
 

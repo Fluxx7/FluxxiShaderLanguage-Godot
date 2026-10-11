@@ -1,7 +1,7 @@
 //! EXPECT: parse_error
 // Kernel body brace is never closed; file ends mid-scope.
 
-layout(std430) buffer peBuf {
+buffer["peBuf"] {
     f32[] xs;
 };
 

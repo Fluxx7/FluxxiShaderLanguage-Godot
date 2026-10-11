@@ -45,8 +45,8 @@ struct Token {
         SYMBOL_EQUALS,
         SYMBOL_OR,
         SYMBOL_PLUS,
-        SYMBOL_LESSTHAN,
-        SYMBOL_GREATERTHAN,
+        SYMBOL_LEFTCARAT,
+        SYMBOL_RIGHTCARAT,
         SYMBOL_COMMA,
         SYMBOL_PERIOD,
         SYMBOL_SINGLEQUOTE,
@@ -59,6 +59,7 @@ struct Token {
         SPECIFIER_OUT,
         SPECIFIER_INOUT,
         SPECIFIER_SHARED,
+        SPECIFIER_PRECISE,
         
         KEYWORD_KERNEL,
         KEYWORD_LAYOUT,
@@ -75,6 +76,8 @@ struct Token {
         KEYWORD_RETURN,
         KEYWORD_CONTINUE,
         KEYWORD_BREAK,
+        KEYWORD_CASE,
+        KEYWORD_DEFAULT,
         KEYWORD_STRUCT,
         KEYWORD_VOID,
         
@@ -82,6 +85,8 @@ struct Token {
         // OPAQUE TYPES
         TYPE_IMAGE2D,
         TYPE_IMAGE2DARRAY,
+        TYPE_SAMPLER,
+        TYPE_SAMPLER2DARRAY,
 
         // USEFUL CATEGORIES
         TEXFORMAT_RGBA16F,
@@ -108,8 +113,8 @@ struct Token {
         CATEGORY_SPECIFIER = 8,
         CATEGORY_GLOBAL_KEYWORD = 16,
         CATEGORY_STATEMENT_KEYWORD = 32,
-        CATEGORY_OPAQUE_TYPE = 64,
-        CATEGORY_TEXTUREFORMAT = 128,
+        CATEGORY_SAMPLER_TYPE = 64,
+        CATEGORY_TEXTURE_TYPE = 128,
         CATEGORY_BUFFERFORMAT = 256,
         CATEGORY_IDENTIFIER = 512,
         CATEGORY_LITERAL = 1024,

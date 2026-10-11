@@ -7,6 +7,7 @@ void print_expression(const Expression& expression, ConsoleString &output);
 void print_resource_node(const ResourceNode& resource_node, ConsoleString &output);
 void print_buffer_def(const BufferDef& buf_def, ConsoleString &output);
 void print_texture_def(const TextureDef& tex_def, ConsoleString &output);
+void print_sampler_def(const SamplerDef& sampler_def, ConsoleString &output);
 void print_variable_decl(const VariableDecl& var_decl, ConsoleString &output);
 void print_scope_node(const ScopeNode& block_node, ConsoleString &output);
 void print_func_decl(const FunctionDecl& func_decl, ConsoleString &output);
@@ -425,6 +426,29 @@ void print_expression(const Expression &expression, ConsoleString &output) {
             output.add_line("},");
             
         },
+        [&](const SwitchNode& switch_node) {
+            output.add_line("SwitchNode {");
+            output.indent();
+            if (!switch_node.is_valid) {
+                output.add_line("Error");
+                output.unindent();
+                output.add_line("},");
+                return;
+            }
+            output.add_line("Operand {");
+            output.indent();
+            print_operation(switch_node.operand, output);
+            output.unindent();
+            output.add_line("},");
+            output.add_line("Body {");
+            output.indent();
+            print_scope_node(switch_node.body, output);
+            output.unindent();
+            output.add_line("},");
+            output.unindent();
+            output.add_line("},");
+            
+        },
         [&](const ScopeNode& subblock) {
             print_scope_node(subblock, output);
         },
@@ -444,6 +468,23 @@ void print_expression(const Expression &expression, ConsoleString &output) {
                 return;
             }
             print_operation(ret_expr.return_val, output);
+            output.unindent();
+            output.add_line("},");
+        },
+        [&](const CaseLabel& case_label) {
+            output.add_line("CaseLabel {");
+            output.indent();
+            if (!case_label.is_valid) {
+                output.add_line("Error");
+                output.unindent();
+                output.add_line("},");
+                return;
+            }
+            if (case_label.case_val.has_value()) {
+                print_operation(*case_label.case_val, output);
+            } else {
+                output.add_line("Default");
+            }
             output.unindent();
             output.add_line("},");
         }
@@ -482,8 +523,8 @@ void print_resource_node(const ResourceNode &resource_node, ConsoleString &outpu
         [&](const TextureDef &texture) { 
             print_texture_def(texture, output);
         },
-        [&](const UniformDef &uniform)  {
-            print_variable_decl(uniform.uniform_decl, output);
+        [&](const SamplerDef &sampler) { 
+            print_sampler_def(sampler, output);
         }
     }, resource_node.resource);
     output.unindent();
@@ -523,6 +564,18 @@ void print_texture_def(const TextureDef& tex_def, ConsoleString &output) {
     output.add_line("Format: %s,", textureFormat_to_string(tex_def.format));
     output.unindent();
     output.add_line("},");
+}
+
+void print_sampler_def(const SamplerDef &sampler_def, ConsoleString &output) {
+    if (sampler_def.type.has_value()) {
+        output.add_line("SamplerDef {");
+        output.indent();
+        output.add_line("Type: %s,", textureType_to_string(*sampler_def.type));
+        output.unindent();
+        output.add_line("},");
+    } else {
+        output.add_line("SamplerDef,");
+    }
 }
 
 void print_variable_decl(const VariableDecl& var_decl, ConsoleString &output) {

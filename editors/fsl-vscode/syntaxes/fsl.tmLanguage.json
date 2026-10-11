@@ -8,7 +8,7 @@
     { "include": "#preprocessor" },
     { "include": "#kernel-declaration" },
     { "include": "#struct-declaration" },
-    { "include": "#layout-declaration" },
+    { "include": "#resource-declaration" },
     { "include": "#annotations" },
     { "include": "#keywords" },
     { "include": "#specifiers" },
@@ -151,19 +151,28 @@
         "2": { "name": "entity.name.type.struct.fsl" }
       }
     },
-    "layout-declaration": {
+    "resource-declaration": {
       "patterns": [
         {
-          "name": "keyword.other.layout.fsl",
-          "match": "\\blayout\\b"
+          "name": "meta.image.declaration.fsl",
+          "match": "\\b(image1D|image2D|image3D|image1DArray|image2DArray|imageCubeMap|imageCubeMapArray|imageBuffer)\\s*(<)\\s*([A-Za-z_]\\w*)\\s*(>)",
+          "captures": {
+            "1": { "name": "storage.type.opaque.fsl" },
+            "2": { "name": "punctuation.definition.typeparameters.begin.fsl" },
+            "3": { "patterns": [{ "include": "#types" }] },
+            "4": { "name": "punctuation.definition.typeparameters.end.fsl" }
+          }
         },
         {
-          "name": "constant.language.format.buffer.fsl",
-          "match": "\\b(std140|std430)\\b"
-        },
-        {
-          "name": "constant.language.format.texture.fsl",
-          "match": "\\b(rgba16f|rgba32f)\\b"
+          "name": "meta.buffer.declaration.fsl",
+          "match": "\\b(buffer)\\s*(\\[)\\s*(\"[^\"]*\")?\\s*(\\])\\s*([A-Za-z_]\\w*)?",
+          "captures": {
+            "1": { "name": "storage.modifier.resource.fsl" },
+            "2": { "name": "punctuation.section.brackets.begin.fsl" },
+            "3": { "name": "string.quoted.double.key.fsl" },
+            "4": { "name": "punctuation.section.brackets.end.fsl" },
+            "5": { "name": "variable.other.block.fsl" }
+          }
         }
       ]
     },
@@ -208,6 +217,10 @@
         {
           "name": "storage.type.opaque.fsl",
           "match": "\\b(image|sampler)(1D|2D|3D|CubeMap|1DArray|2DArray|CubeMapArray|Buffer)\\b"
+        },
+        {
+          "name": "storage.type.opaque.fsl",
+          "match": "\\bsampler\\b"
         }
       ]
     },

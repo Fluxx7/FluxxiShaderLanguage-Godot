@@ -1,7 +1,7 @@
 //! EXPECT: validation_error
 // void function call used as a value.
 
-layout(std430) buffer sinkBuf {
+buffer["sinkBuf"] {
     f32[] sink;
 };
 

@@ -23,7 +23,18 @@
       "methods": [
         { "name": "add_flag", "args": [{ "name": "flag", "type": "ulong" }] },
         { "name": "set_flags", "args": [{ "name": "flags", "type": "ulong" }] },
-        { "name": "remove_flag", "args": [{ "name": "flag", "type": "ulong" }] }
+        { "name": "remove_flag", "args": [{ "name": "flag", "type": "ulong" }] },
+        { "name": "get_size_bytes", "return": "uint" },
+        { "name": "copy_to", "args": [
+          { "name": "dest", "type": "FSLBuffer" },
+          { "name": "allow_different_size", "type": "bool", "default": "true" }
+        ] },
+        { "name": "copy_bytes", "args": [
+          { "name": "dest", "type": "FSLBuffer" },
+          { "name": "num_bytes", "type": "uint" },
+          { "name": "offset_src", "type": "uint", "default": "0" },
+          { "name": "offset_dest", "type": "uint", "default": "0" }
+        ] }
       ]
     },
     "FSLTexture": {
@@ -53,6 +64,9 @@
       "methods": [
         { "name": "set_field", "args": [{ "name": "field", "type": "StringName" }, { "name": "value", "type": "Variant" }] },
         { "name": "set_buffer", "args": [{ "name": "values", "type": "Godot.Collections.Dictionary<StringName, Variant>" }] },
+        { "name": "set_buffer_bytes", "args": [{ "name": "data", "type": "byte[]" }, { "name": "offset", "type": "uint", "default": "0" }, { "name": "num_bytes", "type": "uint", "default": "0" }] },
+        { "name": "get_buffer_values_bytes", "return": "byte[]", "args": [{ "name": "offset", "type": "uint", "default": "0" }, { "name": "num_bytes", "type": "uint", "default": "0" }] },
+        { "name": "get_buffer_values_bytes_async", "args": [{ "name": "callback", "type": "Godot.Callable" }, { "name": "offset", "type": "uint", "default": "0" }, { "name": "num_bytes", "type": "uint", "default": "0" }] },
         { "name": "set_unsized_element_count", "args": [{ "name": "num_elements", "type": "uint" }] }
       ]
     },
@@ -67,14 +81,21 @@
       "extends": "FSLBuffer",
       "methods": [
         { "name": "set_vertex_count", "args": [{ "name": "num_vertices", "type": "uint" }] },
-        { "name": "set_vertex_size_bytes", "args": [{ "name": "vertex_size", "type": "uint" }] }
+        { "name": "set_vertex_size_bytes", "args": [{ "name": "vertex_size", "type": "uint" }] },
+        { "name": "set_buffer_bytes", "args": [{ "name": "data", "type": "byte[]" }, { "name": "offset", "type": "uint", "default": "0" }, { "name": "num_bytes", "type": "uint", "default": "0" }] }
       ]
     },
     "FSLIndexBuffer": {
       "extends": "FSLBuffer",
       "methods": [
         { "name": "set_index_count", "args": [{ "name": "num_indices", "type": "uint" }] },
-        { "name": "set_index_format", "args": [{ "name": "new_format", "type": "RenderingDevice.IndexBufferFormat" }] }
+        { "name": "set_index_format", "args": [{ "name": "new_format", "type": "RenderingDevice.IndexBufferFormat" }] },
+        { "name": "copy_indices", "args": [
+          { "name": "dest", "type": "FSLBuffer" },
+          { "name": "num_indices", "type": "uint", "default": "0" },
+          { "name": "offset", "type": "uint", "default": "0" },
+          { "name": "dest_offset_bytes", "type": "uint", "default": "0" }
+        ] }
       ]
     },
     "FSLTexture2D": {
@@ -110,6 +131,18 @@
     "FSLTextureView": {
       "extends": "FSLTexture",
       "methods": [
+      ]
+    },
+    "FSLSamplerType": {
+      "extends": "FSLResource",
+      "abstract": true,
+      "methods": [
+      ]
+    },
+    "FSLSampler2DArray": {
+      "extends": "FSLSamplerType",
+      "methods": [
+        { "name": "bind_texture", "args": [{ "name": "texture", "type": "FSLTexture2DArray" }] }
       ]
     },
     "ComputeKernel": {
@@ -149,6 +182,7 @@
         { "name": "get_index_buffer", "return": "FSLIndexBuffer", "args": [{ "name": "buffer_name", "type": "StringName" }] },
         { "name": "get_texture_2d", "return": "FSLTexture2D", "args": [{ "name": "texture_name", "type": "StringName" }] },
         { "name": "get_texture_2d_array", "return": "FSLTexture2DArray", "args": [{ "name": "texture_name", "type": "StringName" }] },
+        { "name": "get_sampler_2d_array", "return": "FSLSampler2DArray", "args": [{ "name": "sampler_name", "type": "StringName" }] },
         { "name": "get_resource", "return": "FSLResource", "args": [{ "name": "resource_name", "type": "StringName" }] }
       ]
     },
@@ -188,6 +222,7 @@
         { "name": "get_index_buffer", "return": "FSLIndexBuffer", "args": [{ "name": "buffer_name", "type": "StringName" }] },
         { "name": "get_texture_2d", "return": "FSLTexture2D", "args": [{ "name": "texture_name", "type": "StringName" }] },
         { "name": "get_texture_2d_array", "return": "FSLTexture2DArray", "args": [{ "name": "texture_name", "type": "StringName" }] },
+        { "name": "get_sampler_2d_array", "return": "FSLSampler2DArray", "args": [{ "name": "sampler_name", "type": "StringName" }] },
         { "name": "get_resource", "return": "FSLResource", "args": [{ "name": "resource_name", "type": "StringName" }] }
       ]
     },

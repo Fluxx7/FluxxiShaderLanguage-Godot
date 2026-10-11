@@ -79,6 +79,10 @@ class Generator:
             pass
         return root
 
+    def factory_of(self, cls):
+        """Name of the static factory class holding cls's hierarchy's Wrap()."""
+        return "{}Factory".format(self.root_of(cls))
+
     def engine_base(self, cls):
         """The nearest engine class, taken from the root of the wrapper hierarchy."""
         return self.classes[self.root_of(cls)].get("base", "RefCounted")
@@ -147,7 +151,7 @@ class Generator:
             root = self.root_of(ret)
             cast = "" if ret == root else "({})".format(ret)
             lines.append("    {} => {}{}.Wrap({}.AsGodotObject());".format(
-                signature, cast, root, call))
+                signature, cast, self.factory_of(root), call))
         elif enum_type is not None:
             lines.append("    {} => ({}){}.As<long>();".format(signature, enum_type, call))
         else:
@@ -165,7 +169,8 @@ class Generator:
         if type_name in self.classes:
             root = self.root_of(type_name)
             cast = "" if type_name == root else "({})".format(type_name)
-            lines.append("        get => {}{}.Wrap({}.AsGodotObject());".format(cast, root, get_call))
+            lines.append("        get => {}{}.Wrap({}.AsGodotObject());".format(
+                cast, self.factory_of(root), get_call))
             lines.append("        set => Inner.Set(PropertyName.{}, value?.Inner);".format(cs_name))
         elif enum_type is not None:
             lines.append("        get => ({}){}.As<long>();".format(enum_type, get_call))
@@ -184,6 +189,31 @@ class Generator:
             lines.append('        public static readonly StringName {} = "{}";'.format(cs_name, gd_name))
         lines.append("    }")
         lines.append("")
+
+    def generate_factory(self, root):
+        """A standalone factory so Wrap() does not show up on every wrapper class.
+
+        C# inherits static members, so a Wrap() declared on the hierarchy root
+        would be offered as ClassName.Wrap on every subclass; keeping it here
+        leaves the wrappers' own surface to the methods the manifest declares.
+        """
+        lines = [HEADER + "namespace {};".format(self.namespace), ""]
+        lines.append('/// <summary>Wraps a GDExtension object in the most-derived C# wrapper for its Godot class.</summary>')
+        lines.append("public static class {}".format(self.factory_of(root)))
+        lines.append("{")
+        descendants = self.concrete_descendants(root)
+        if descendants:
+            lines.append("    public static {} Wrap(GodotObject inner) => inner?.GetClass() switch".format(root))
+            lines.append("    {")
+            lines.append("        null => null,")
+            for descendant in descendants:
+                lines.append('        "{}" => new {}(inner),'.format(descendant, descendant))
+            lines.append("        _ => new {}(inner),".format(root))
+            lines.append("    };")
+        else:
+            lines.append("    public static {} Wrap(GodotObject inner) => inner == null ? null : new {}(inner);".format(root, root))
+        lines.append("}")
+        return "\n".join(lines) + "\n"
 
     def generate_class(self, cls):
         spec = self.classes[cls]
@@ -221,19 +251,6 @@ class Generator:
 
         if is_root:
             lines.append("    public static implicit operator Variant({} wrapper) => wrapper?.Inner ?? default;".format(cls))
-            lines.append("")
-            lines.append("    /// <summary>Wraps a GDExtension object in the most-derived C# wrapper for its Godot class.</summary>")
-            descendants = self.concrete_descendants(cls)
-            if descendants:
-                lines.append("    public static {} Wrap(GodotObject inner) => inner?.GetClass() switch".format(cls))
-                lines.append("    {")
-                lines.append("        null => null,")
-                for descendant in descendants:
-                    lines.append('        "{}" => new {}(inner),'.format(descendant, descendant))
-                lines.append("        _ => new {}(inner),".format(cls))
-                lines.append("    };")
-            else:
-                lines.append("    public static {} Wrap(GodotObject inner) => inner == null ? null : new {}(inner);".format(cls, cls))
             lines.append("")
 
         for enum, values in spec.get("enums", {}).items():
@@ -285,6 +302,11 @@ def main():
         path = os.path.join(args.out, "{}.cs".format(cls))
         with open(path, "w") as out:
             out.write(generator.generate_class(cls))
+        print("generated {}".format(path))
+    for root in [cls for cls in generator.classes if generator.classes[cls].get("extends") is None]:
+        path = os.path.join(args.out, "{}.cs".format(generator.factory_of(root)))
+        with open(path, "w") as out:
+            out.write(generator.generate_factory(root))
         print("generated {}".format(path))
 
 

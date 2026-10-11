@@ -15,7 +15,11 @@ TextureFormat token_to_tex_format(const Token* token) {
 optional<TextureType> token_to_tex_type(const Token* token) {
     switch (token->token_type) {
         case Token::TYPE_IMAGE2D: return TEXTURE2D;
+
+        case Token::TYPE_SAMPLER2DARRAY:
         case Token::TYPE_IMAGE2DARRAY: return TEXTURE2DARRAY;
+
+        case Token::TYPE_SAMPLER:
         default: return {};
     }
 }
@@ -59,6 +63,8 @@ TypeRef FSLParser::_parse_type(TokenStream& stream) {
             case Token::SPECIFIER_SHARED:
                 new_type.specifiers.push_back(SPECIFIER_SHARED);
                 break;
+            case Token::SPECIFIER_PRECISE:
+                new_type.specifiers.push_back(SPECIFIER_PRECISE);
             default:
                 break;
         }
@@ -301,6 +307,7 @@ Operation FSLParser::_parse_op_segment(TokenStream &stream) {
 
         case LITERAL: {
             // are any literals other than numerical literals needed for a shader language?
+            // answer from two (?) months later: yeah, boolean literals
             Literal literal;
             literal.debug_info.file_name = stream.peek().get_debug_info().source_file;
             literal.debug_info.start_row = stream.peek().get_debug_info().row;
@@ -422,11 +429,32 @@ Expression FSLParser::_parse_expression(TokenStream &&stream, bool is_global) {
             stream.expect(Token::BRACE_OPEN);
             return _parse_while_statement(stream.get_stream());
         } break;
+        case Token::KEYWORD_SWITCH: {
+            stream.consume();
+            stream.start_slice();
+            while (!stream.at_end() && stream.peek().get_type() != Token::BRACE_OPEN) {
+                stream.consume();
+            }
+            stream.expect(Token::BRACE_OPEN);
+            return _parse_switch_statement(stream.get_stream());
+        } break;
         case Token::KEYWORD_RETURN: {
             ReturnExpression ret_expr;
             stream.consume();
             ret_expr.return_val = _parse_operation(stream.clip());
             return ret_expr;
+        }
+        case Token::KEYWORD_CASE: {
+            CaseLabel case_label;
+            stream.consume();
+            case_label.case_val = _parse_operation(stream.clip());
+            return case_label;
+        }
+        case Token::KEYWORD_DEFAULT: {
+            CaseLabel case_label;
+            stream.consume();
+            case_label.case_val = {};
+            return case_label;
         }
         case Token::BRACE_OPEN: {
             stream.descend_brace();
@@ -565,7 +593,7 @@ WhileNode AST::FSLParser::_parse_while_statement(TokenStream &&stream) {
     };
     
     if (!stream.descend_paren()) {
-        log_expected_tok_err_loc("\'(\'", "after `if`", stream.peek());
+        log_expected_tok_err_loc("\'(\'", "after `while`", stream.peek());
         return err_while();
     }
 
@@ -580,6 +608,28 @@ WhileNode AST::FSLParser::_parse_while_statement(TokenStream &&stream) {
     }
     new_while.body = _parse_brace_scope(std::move(stream));
 	return new_while;
+}
+
+SwitchNode AST::FSLParser::_parse_switch_statement(TokenStream &&stream) {
+    SwitchNode new_switch;
+	 auto err_switch = [&](){
+        new_switch.is_valid = false;
+        return new_switch;
+    };
+    
+    if (!stream.descend_paren()) {
+        log_expected_tok_err_loc("\'(\'", "after `switch`", stream.peek());
+        return err_switch();
+    }
+
+    new_switch.operand = _parse_operation(stream.clip_and_ascend());
+
+    if (!stream.descend_brace()) {
+        log_expected_tok_err_loc("\'{\'", "after switch statement", stream.peek());
+        return err_switch();
+    }
+    new_switch.body = _parse_brace_scope(std::move(stream));
+	return new_switch;
 }
 
 ScopeNode FSLParser::_parse_brace_scope(TokenStream &&stream) {
@@ -666,12 +716,9 @@ FunctionDecl FSLParser::_parse_func_decl(Slice<TokenTree> tokens) {
             uint32_t tok_index = stream.get_index();
 
             auto& token = stream.consume();
-            switch (token.get_type()) {
-                case Token::IDENTIFIER:
-                case Token::SPECIFIER_IN:
-                case Token::SPECIFIER_OUT:
-                case Token::SPECIFIER_INOUT:
-                case Token::SPECIFIER_CONST: {
+            switch (token.get_category()) {
+                case Token::CATEGORY_IDENTIFIER:
+                case Token::CATEGORY_SPECIFIER: {
                     uint32_t var_decl_len = 1;
 
                     // it's ok if this terminates due to EOS
@@ -753,19 +800,41 @@ StructDecl AST::FSLParser::_parse_struct_decl(TokenStream&& stream) {
 	return new_struct;
 }
 
-void FSLParser::_parse_texture(const Token *layout_token, TokenStream &stream, ResourceNode &res_node) {
+void FSLParser::_parse_sampler(TokenStream &stream, ResourceNode &res_node) {
+	SamplerDef new_sampler;
+    auto err_sampler = [&](){
+        res_node.is_valid = false;
+        res_node.resource = new_sampler;
+        return;
+    };
+
+    auto sampler_type_token = stream.consume();
+    auto sampler_type = token_to_tex_type(sampler_type_token.get_token());
+    if (!sampler_type.has_value() && sampler_type_token.get_contents() != "sampler") {
+        log_expected_tok_err_loc("valid sampler type", "in sampler declaration", stream.peek());
+        return err_sampler();
+    }
+    new_sampler.type = sampler_type;
+
+    auto sampler_name = stream.peek();
+    if(!stream.expect(Token::IDENTIFIER)) {
+        log_expected_tok_err_loc("valid identifier for sampler", "in sampler declaration", stream.peek());
+        return err_sampler();
+    }
+    res_node.name = sampler_name.get_contents();
+    res_node.resource = new_sampler;
+    const auto& last_debug_info = stream.get_last_debug_info();
+    res_node.debug_info.end_row = last_debug_info.row;
+    res_node.debug_info.end_column = last_debug_info.column + last_debug_info.length;
+}
+
+void FSLParser::_parse_texture(TokenStream &stream, ResourceNode &res_node) {
 	TextureDef new_texture;
-    new_texture.format = token_to_tex_format(layout_token);
     auto err_texture = [&](){
         res_node.is_valid = false;
         res_node.resource = new_texture;
         return;
     };
-
-    if(!stream.expect(Token::KEYWORD_UNIFORM)) {
-        log_expected_tok_err_loc("uniform", "in texture declaration", stream.peek());
-        return err_texture();
-    }
 
     auto tex_type_token = stream.consume().get_token();
     auto tex_type = token_to_tex_type(tex_type_token);
@@ -774,6 +843,22 @@ void FSLParser::_parse_texture(const Token *layout_token, TokenStream &stream, R
         return err_texture();
     }
     new_texture.type = *tex_type;
+
+    if (stream.expect(Token::SYMBOL_LEFTCARAT)) {
+        auto format_string = stream.consume().get_contents();
+        if (format_string == "f32x4") {
+            new_texture.format = RGBA32F;
+        } else {
+            new_texture.format = RGBA16F;
+        }
+        if (!stream.expect(Token::SYMBOL_RIGHTCARAT)) {
+            log_expected_tok_err_loc(">", "after texture format declaration", stream.peek());
+            return err_texture();
+        }
+    } else {
+        new_texture.format = RGBA32F;
+    }
+
 
     auto tex_name = stream.peek();
     if(!stream.expect(Token::IDENTIFIER)) {
@@ -787,33 +872,36 @@ void FSLParser::_parse_texture(const Token *layout_token, TokenStream &stream, R
     res_node.debug_info.end_column = last_debug_info.column + last_debug_info.length;
 }
 
-void FSLParser::_parse_buffer(const Token *layout_token, TokenStream &stream, ResourceNode &res_node) {
+void FSLParser::_parse_buffer(TokenStream&& stream, ResourceNode &res_node, bool is_uniform) {
     BufferDef new_buffer;
-    new_buffer.layout = token_to_buf_format(layout_token);
+    new_buffer.buftype = is_uniform ? UNIFORM : STORAGE;
+    new_buffer.layout = is_uniform ? STD140 : STD430;
     auto err_buffer = [&](){
         res_node.is_valid = false;
         res_node.resource = new_buffer;
         return;
     };
 
-    switch (auto token = stream.consume(); token.get_type()) {
-        case Token::KEYWORD_UNIFORM:
-            new_buffer.buftype = UNIFORM;
-            break;
-        case Token::KEYWORD_BUFFER:
-            new_buffer.buftype = STORAGE;
-            break;
-        default:
-            log_expected_tok_err_loc("uniform or buffer", "in buffer declaration", token);
-            return err_buffer();
-    }
-
-    auto buf_name = stream.peek();
-    if(!stream.expect(Token::IDENTIFIER)) {
-        log_expected_tok_err_loc("valid identifier for buffer", "in buffer declaration", stream.peek());
+    if (!stream.descend_bracket()) {
+        log_expected_tok_err_loc("[", "after `buffer`", stream.peek());
         return err_buffer();
     }
-    res_node.name = buf_name.get_contents();
+    {
+        stream.expect(Token::SYMBOL_DOUBLEQUOTE);
+        auto buf_name = stream.peek();
+        if(!stream.expect(Token::IDENTIFIER)) {
+            log_expected_tok_err_loc("valid identifier for buffer", "in buffer declaration", stream.peek());
+            return err_buffer();
+        }
+        stream.expect(Token::SYMBOL_DOUBLEQUOTE);
+        res_node.name = buf_name.get_contents();
+        stream.ascend();
+    }
+   
+
+    if(stream.peek().get_category() == Token::CATEGORY_IDENTIFIER) {
+        new_buffer.buffer_name = stream.consume().get_contents();
+    }
 
     if(stream.expect(Token::SYMBOL_COLON)) {
         stream.start_slice();
@@ -837,55 +925,35 @@ void FSLParser::_parse_buffer(const Token *layout_token, TokenStream &stream, Re
         }
         stream.ascend();
     }
-    if(!stream.expect_not(Token::IDENTIFIER)) {
-        new_buffer.buffer_name = stream.consume().get_contents();
-    }
         
     res_node.resource = new_buffer;
     const auto& last_debug_info = stream.get_last_debug_info();
     res_node.debug_info.end_row = last_debug_info.row;
     res_node.debug_info.end_column = last_debug_info.column + last_debug_info.length;
+    if (!stream.at_end()) {
+        log_unexpected_tok_err_loc("resource declaration", stream.peek());
+        res_node.is_valid = false;
+    }
 }
 
 ResourceNode FSLParser::_parse_resource(Slice<TokenTree> tokens) {
     ResourceNode new_resource;
     TokenStream stream = tokens.get_stream();
-    // the layout token is included in the slice so that the debug info can be grabbed from it
-    stream.consume();
     new_resource.debug_info.file_name = stream.get_last_debug_info().source_file;
     new_resource.debug_info.start_row = stream.get_last_debug_info().row;
     new_resource.debug_info.start_column = stream.get_last_debug_info().column;
-    ResourceType res_type;
-    const Token* layout_token;
-    {
-        if (!stream.descend_paren()) {
-            log_expected_tok_err_loc("'('", "after `layout`", stream.peek());
-            new_resource.is_valid = false;
-            return new_resource;
-        }
-        switch (stream.peek().get_category()) {
-            case Token::CATEGORY_BUFFERFORMAT:
-                res_type = RESTYPE_BUFFER;
-                break;
-            case Token::CATEGORY_TEXTUREFORMAT:
-                res_type = RESTYPE_TEXTURE;
-                break;
-            default:
-                log_unexpected_tok_err_loc("resource layout", stream.peek());
-                new_resource.is_valid = false;
-                return new_resource;
-        }
-        layout_token = stream.consume().get_token();
-        if (!stream.at_end()) {
-            log_unexpected_tok_err_loc("resource layout", stream.peek());
-        }
-        stream.ascend();
-    }
     
-    if (res_type == RESTYPE_TEXTURE) {
-        _parse_texture(layout_token, stream, new_resource);
+    if (stream.expect(Token::KEYWORD_BUFFER)) {
+        _parse_buffer(stream.clip(), new_resource, true);
+        return new_resource;
+    } else if (stream.peek().get_category() == Token::CATEGORY_TEXTURE_TYPE) {
+        _parse_texture(stream, new_resource);
+    } else if (stream.peek().get_category() == Token::CATEGORY_SAMPLER_TYPE) {
+        _parse_sampler(stream, new_resource);
     } else {
-        _parse_buffer(layout_token, stream, new_resource);
+        log_expected_tok_err_loc("valid resource type", "in resource declaration", stream.peek());
+        new_resource.is_valid = false;
+        return new_resource;
     }
 
     if (!stream.at_end()) {
@@ -1037,24 +1105,25 @@ LocalVector<FSLError> FSLParser::_parse_file(fslAST &ast, Span<TokenTree> tokens
                     return errors;
                 }
                 GlobalDeclaration new_global_decl;
-                ResourceNode uniform_node;
-                new_global_decl.value = _parse_operation(stream.get_slice());
+                new_global_decl.value = _parse_resource(stream.get_slice());
                 stream.consume();
                 ast.contents.push_back(new_global_decl);
             } break;
-            case Token::KEYWORD_LAYOUT: {
+            case Token::KEYWORD_BUFFER: {
                 flush_expression();
-                stream.start_slice();
                 stream.consume();
+                stream.start_slice();
                 if (!stream.consume_until<Token::SYMBOL_SEMICOLON>(false)) {
                     log_parser_err("Unexpected end of file", stream.peek().get_debug_info(), FSLError::ERR_UNEXPECTED_EOF);
                     return errors;
                 }
                 GlobalDeclaration new_global_decl;
-                new_global_decl.value = _parse_resource(stream.get_slice());
+                ResourceNode res_node;
+                _parse_buffer(stream.get_stream(), res_node, false);
+                new_global_decl.value = res_node;
                 stream.consume();
                 ast.contents.push_back(new_global_decl);
-            } break;    
+            } break;
             case Token::BRACE_OPEN:
                 push_expression();
             case Token::SYMBOL_SEMICOLON:

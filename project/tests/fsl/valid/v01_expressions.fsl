@@ -5,7 +5,7 @@
 // swizzle chains and write masks, literal formats, nested calls/indexing,
 // every compound assignment operator.
 
-layout(std430) buffer exprResults {
+buffer["exprResults"] {
     f32[] results;
 };
 

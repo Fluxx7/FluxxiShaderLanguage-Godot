@@ -1,11 +1,11 @@
 //! EXPECT: validation_error
-// Two resources declared with the same block name.
+// Two resources declared with the same resource key.
 
-layout(std430) buffer clashing {
+buffer["clashing"] {
     f32[] a;
 };
 
-layout(std430) buffer clashing {
+buffer["clashing"] {
     u32[] b;
 };
 

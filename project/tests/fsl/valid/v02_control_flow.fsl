@@ -4,7 +4,7 @@
 // Control-flow stress test: braceless if/else, dangling else, else-if
 // ladders, nested for loops, empty bodies, bare scope blocks, early returns.
 
-layout(std430) buffer flowResults {
+buffer["flowResults"] {
     i32[] flow_out;
 };
 

@@ -7,7 +7,8 @@ language that transpiles to GLSL (see the
 ## Highlights
 
 - `kernel[x, y, z] name(...)` declarations (keyword, workgroup size, kernel name)
-- `layout(std430) buffer` / `layout(rgba32f) uniform image2D` resource declarations
+- `buffer["key"] instance` / `uniform image2D<f32x4>` / `uniform sampler`
+  resource declarations
 - FSL types: scalars (`f32`, `u32`, `i32`, `f64`, `bool`, and the other bit widths),
   vectors (`f32x2`–`f32x4`, `u32x3`, …), matrices (`f32x4x4`, …), plus opaque
   image/sampler types (`image2D`, `image2DArray`, …)

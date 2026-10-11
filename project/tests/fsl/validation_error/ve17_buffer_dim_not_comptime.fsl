@@ -4,7 +4,7 @@
 
 const u32 n : specialization_constant = 8;
 
-layout(std430) buffer specSized {
+buffer["specSized"] {
     f32[n] xs;
 };
 

@@ -2,7 +2,7 @@
 // Declaration with a misspelled type name. Grammatically fine (types are
 // identifiers to the parser); the validator must reject the unknown type.
 
-layout(std430) buffer sinkBuf {
+buffer["sinkBuf"] {
     f32[] sink;
     fink mink;
 };

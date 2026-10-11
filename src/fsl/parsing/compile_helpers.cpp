@@ -108,15 +108,33 @@ String tex_to_glsl_name(const TextureType &tex_type) {
     }
 }
 
+String sampler_to_glsl_name(const optional<TextureType> &sampler_type) {
+    if (!sampler_type.has_value()) return "sampler";
+    switch (*sampler_type) {
+        case TEXTURE2D:
+            return "sampler2D";
+        case TEXTURE2DARRAY:
+            return "sampler2DArray";
+    }
+}
+
 Pair<TextureInfo, String> texture_to_glsl(const String &texture_name, const AST::TextureDef &texture) {
     TextureInfo tex_info;
-    String res_code;
+    
     tex_info.format = texture.format;
     tex_info.type = texture.type;
     tex_info.mip_count = 1;
 
     String tex_format = textureFormat_to_string(texture.format);
     String tex_type = tex_to_glsl_name(texture.type);
-    res_code += vformat("%s) restrict uniform %s %s;\n", tex_format, tex_type, texture_name);
+    String res_code = vformat(", %s) restrict uniform %s %s;\n", tex_format, tex_type, texture_name);
 	return {tex_info, res_code};
+}
+
+Pair<SamplerInfo, String> sampler_to_glsl(const String &sampler_name, const AST::SamplerDef &sampler) {
+    SamplerInfo sampler_info;
+    sampler_info.type = sampler.type;
+    String tex_type = sampler_to_glsl_name(sampler.type);
+    String res_code = vformat(") uniform %s %s;\n", tex_type, sampler_name);
+	return {sampler_info, res_code};
 }

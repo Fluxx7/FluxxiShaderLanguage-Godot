@@ -2,11 +2,11 @@
 // Shared array dims may be comptime or pipeline constant, but never runtime:
 // sizing one from a buffer field must be rejected.
 
-layout(std430) buffer paramsBlock {
+buffer["paramsBlock"] params {
     u32 runtime_size;
-} params;
+};
 
-layout(std430) buffer sinkBuf {
+buffer["sinkBuf"] {
     f32[] sink;
 };
 

@@ -1,7 +1,7 @@
 //! EXPECT: validation_error
 // Swizzle component out of range for the vector width.
 
-layout(std430) buffer sinkBuf {
+buffer["sinkBuf"] {
     f32[] sink;
 };
 

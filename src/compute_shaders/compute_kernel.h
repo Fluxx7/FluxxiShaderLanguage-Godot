@@ -10,6 +10,9 @@
 #include "fsl/fsl_defs.h"
 #include "resources/fsl_buffer.h"
 #include "resources/fsl_texture.h"
+#include "resources/fsl_sampler_type.h"
+
+#include "api_helpers.h"
 
 using namespace godot;
 
@@ -88,6 +91,8 @@ public:
 
     Ref<FSLTexture2D> get_texture_2d(const StringName &texture_name);
     Ref<FSLTexture2DArray> get_texture_2d_array(const StringName &texture_name);
+
+    Ref<FSLSampler2DArray> get_sampler_2d_array(const StringName& sampler_name);
 
     Ref<FSLResource> get_resource(const StringName &res_name);
 

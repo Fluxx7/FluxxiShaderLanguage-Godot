@@ -7,7 +7,9 @@
 
 inline constexpr const char* fsl_opaques[] = {
     "image2D",
-    "image2DArray"
+    "image2DArray",
+    "sampler2D",
+    "sampler2DArray"
 };
 
 inline constexpr const char* fsl_operators[] = {
@@ -43,7 +45,8 @@ inline constexpr const char *fsl_specifiers[] = {
     "out",
     "inout",
     "const",
-    "shared"
+    "shared",
+    "precise"
 };
 
 enum FSLSpecifier {
@@ -51,7 +54,8 @@ enum FSLSpecifier {
     SPECIFIER_OUT,
     SPECIFIER_INOUT,
     SPECIFIER_CONST,
-    SPECIFIER_SHARED
+    SPECIFIER_SHARED,
+    SPECIFIER_PRECISE
 };
 
 String specifier_to_string(FSLSpecifier specifier);
@@ -184,8 +188,6 @@ Variant get_fsl_default_value(const FSLType& fsl_type);
 FSLLayout get_fsl_base_type_layout(const FSLBaseType& base_type, BufferFormat format);
 
 FSLLayout get_fsl_type_layout(const FSLType& fsl_type, uint32_t unsized_count, BufferFormat format);
-
-PackedByteArray fsl_type_to_bytes(const FSLType& fsl_type, Variant value);
 
 // bool variant_matches_fsl_type(const FSLType &fsl_type, const godot::Variant &gvariant);
 

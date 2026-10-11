@@ -1,6 +1,6 @@
 //! EXPECT: parse_error
-// layout() with an empty format list.
+// Buffer declaration with no resource key.
 
-layout() buffer noFormat {
+buffer noKey {
     f32[] xs;
 };

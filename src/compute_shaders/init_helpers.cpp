@@ -24,6 +24,11 @@ Ref<FSLResource> _init_texture(const TextureInfo &tex_info, RenderingDevice *rd)
     }
 }
 
+Ref<FSLSamplerType> _init_sampler(const SamplerInfo &sampler_info, RenderingDevice *rd) {
+    Ref<FSLTexture2DArray> dummy_texture = FSLTexture2DArray::new_texture(rd, {RGBA16F, TEXTURE2DARRAY, 1});
+    return FSLSampler2DArray::new_sampler(rd, sampler_info, dummy_texture);
+}
+
 Ref<FSLResource> init_resource(const ResourceInfo &res_info, RenderingDevice *rd) {
     Ref<FSLResource> new_resource = Ref<FSLResource>();
     match(res_info.type_info, 
@@ -33,8 +38,8 @@ Ref<FSLResource> init_resource(const ResourceInfo &res_info, RenderingDevice *rd
         [&](const TextureInfo &tex_info) {
             new_resource = _init_texture(tex_info, rd);
         },
-        [&](const VariableInfo &var_info)  {
-            print_error("\t\tHow the fuck");
+        [&](const SamplerInfo &sampler_info) {
+            new_resource = _init_sampler(sampler_info, rd);
         });
 	return new_resource;
 }

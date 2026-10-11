@@ -139,6 +139,11 @@ void FSLValidator::validate_expression(const Expression &expr) {
 			validate_operation_list(while_node.cond);
 			validate_scope(while_node.body);
 		},
+		[&](const SwitchNode& switch_node) {
+			auto switch_scope = ScopeRef(*this);
+			validate_operation_list(switch_node.operand);
+			validate_scope(switch_node.body);
+		},
 		[&](const ScopeNode& scope) {
 			validate_scope(scope);
 		}, 
@@ -159,6 +164,12 @@ void FSLValidator::validate_expression(const Expression &expr) {
 		},
 		[&](const ReturnExpression& ret_expr) {
 			validate_operation_list(ret_expr.return_val);
+		},
+		[&](const CaseLabel& case_label) {
+			// todo: add checks for no duplicate labels in a switch statement, as well as no case labels outside of a switch statement
+			if (case_label.case_val.has_value()) {
+				validate_operation_list(*case_label.case_val);
+			}
 		});
 }
 
@@ -251,6 +262,8 @@ void FSLValidator::validate_buffer_annotations(const AST::BufferDef &buffer, con
 						break;
 				}
 				break;
+			case 4:
+				break;
 			default:
 				log_validation_error("\"%s\" is not a valid annotation for buffers", debug_info, FSLError::ERR_UNKNOWN_ANNOTATION, name);
 				break;
@@ -260,10 +273,11 @@ void FSLValidator::validate_buffer_annotations(const AST::BufferDef &buffer, con
 }
 
 LocalVector<FSLError> FSLValidator::_validate_ast(const fslAST &ast) {
-	// these are kinda cheap hacks that give me a fast way to safely insert buffers and textures into the global variable list.
+	// these are kinda cheap hacks that give me a fast way to safely insert buffers, textures, and samplers into the global variable list.
 	// in the future, these should be removed and replaced with either separate lists tracking resources or a more advanced bookkeeping method
 	static VariableDecl buffer_var = {DebugInfo(), true, "", {DebugInfo(), true, {}, "buffer", {}}, {}};
 	static VariableDecl texture_var = {DebugInfo(), true, "", {DebugInfo(), true, {}, "texture", {}}, {}};
+	static VariableDecl sampler_var = {DebugInfo(), true, "", {DebugInfo(), true, {}, "sampler", {}}, {}};
 	static HashMap<StringName, VariableDecl> bindables = {
 		{"GlobalInvocationID", {DebugInfo(), true, "", {DebugInfo(), true, {SPECIFIER_CONST}, "uint3", {}}, {}}},
         {"LocalInvocationID", {DebugInfo(), true, "", {DebugInfo(), true, {SPECIFIER_CONST}, "uint3", {}}, {}}},
@@ -320,6 +334,13 @@ LocalVector<FSLError> FSLValidator::_validate_ast(const fslAST &ast) {
 							global_scope.local_vars[resource.name] = &texture_var;
 						}
 					}, 
+					[&](const SamplerDef& sampler) {
+						if (global_scope.local_vars.has(resource.name)) {
+								log_redeclared_variable_error(resource.name, resource.debug_info, *global_scope.local_vars[resource.name]);
+						} else {
+							global_scope.local_vars[resource.name] = &sampler_var;
+						}
+					}, 
 					[&](const BufferDef& buffer) {
 						bool is_named = false;
 						if (!buffer.buffer_name.is_empty()) {
@@ -356,9 +377,6 @@ LocalVector<FSLError> FSLValidator::_validate_ast(const fslAST &ast) {
 						}
 					
 
-					}, 
-					[&](const UniformDef& uniform) {
-						validate_variable_decl(uniform.uniform_decl);
 					});
 			}, 
 			[&](const Expression& expression) {

@@ -1,41 +1,52 @@
 //! EXPECT: valid
 //! KERNELS: resKernelA resKernelB
 //
-// Resource declaration stress test: all four buffer layouts (std140, std430,
-// vertex, index), named and anonymous blocks, both image types and formats,
-// a bare uniform variable, and kernels touching disjoint resource subsets
-// (exercises the used-resource filtering: resKernelA must only bind dataBlock
-// and globalScale).
+// Resource declaration stress test for the reworked resource system:
+// buffers keyed by a string name, storage vs. uniform blocks, named
+// (instance-qualified) and anonymous blocks, buffer annotations
+// (godot_vertex, godot_index, flag_indirect), format-parameterized image
+// types, a sampler, and kernels touching disjoint resource subsets
+// (exercises the used-resource filtering: resKernelA must only bind
+// dataBlock and dispatchBlock).
 
-layout(std140) buffer paramBlock {
+uniform buffer["paramBlock"] params {
     f32x4 tint;
     u32 count;
-} params;
+};
 
-layout(std430) buffer dataBlock {
+buffer["dataBlock"] {
     f32[] data;
 };
 
-layout(std430) buffer meshVerts : godot_vertex {
+buffer["meshVerts"] : godot_vertex {
     f32x3 position;
     f32x2 uv;
 };
 
-layout(std430) buffer meshIndices : godot_index {
-    u32 index;
+buffer["meshIndices"] index_buffer : godot_index {
+    u32[] index;
 };
 
-layout(rgba32f) uniform image2D outImage;
-layout(rgba16f) uniform image2DArray layerImage;
+buffer["dispatchBlock"] dispatch_args : flag_indirect {
+    u32 group_count_x;
+    u32 group_count_y;
+    u32 group_count_z;
+};
 
-uniform f32 globalScale;
+uniform image2D<f32x4> outImage;
+uniform image2DArray<f16x4> layerImage;
+uniform sampler layerSampler;
 
 kernel[64, 1, 1] resKernelA(id : GlobalInvocationID) {
-    data[id.x] = f32(id.x) * globalScale;
+    data[id.x] = f32(id.x);
+    if (id.x == 0u) {
+        dispatch_args.group_count_x = 1;
+    }
 }
 
 kernel[8, 8, 1] resKernelB(id : GlobalInvocationID) {
     if (id.x >= params.count) return;
     f32x4 px = imageLoad(layerImage, i32x3(i32(id.x), i32(id.y), 0)) * params.tint;
+    px += layerSampler(layerImage)[f32x3(f32x2(id.xy) / 64.0, 0.0)];
     imageStore(outImage, i32x2(id.xy), px);
 }

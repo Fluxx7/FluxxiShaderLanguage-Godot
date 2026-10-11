@@ -9,7 +9,7 @@
    spanning lines *//* immediately adjacent block */// then a line comment
 // ünïcödé çömmént ✓ 数学 test
 
-layout(std430)/*mid*/buffer/*comments*/fmtBuf{f32[]fmt_out;};
+buffer/*mid*/["fmtBuf"]/*comments*/{f32[]fmt_out;};
 
 const/*c*/f32/*c*/squeezed=1.;
 	const f32 	spaced   =   .5   ;

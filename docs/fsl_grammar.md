@@ -70,18 +70,16 @@ not final, and the current implementation reserves all of them)**:
 |-------------------|------------------------------------------------|-------------------------|
 | control flow      | `if` `else` `for` `return`                     | reserved                |
 | specifiers        | `const` `in` `out` `inout` `shared`            | reserved                |
-| declaration       | `kernel` `layout` `buffer` `uniform`           | contextual (not reserved) |
-| buffer formats    | `std140` `std430` `vertex` `index`             | contextual (not reserved) |
-| texture formats   | `rgba16f` `rgba32f`                            | contextual (not reserved) |
-| image types       | `image2D` `image2DArray`                       | contextual (not reserved) |
+| declaration       | `kernel` `buffer` `uniform` `struct`           | contextual (not reserved) |
+| opaque types      | `image2D` `image2DArray` `sampler`             | contextual (not reserved) |
 
 *Contextual* keywords only act as keywords in the positions the grammar
-shows them (global declaration heads, inside `layout(...)`); elsewhere they
-are ordinary identifiers, so `uint index;` is intended to be a legal buffer
-member. The current lexer classifies these globally, which reserves them
-everywhere for now.
+shows them (global declaration heads); elsewhere they are ordinary
+identifiers, so `u32 index;` is intended to be a legal buffer member. The
+current lexer classifies these globally, which reserves them everywhere for
+now.
 
-Type names (`float`, `uint3`, …) are **not** reserved words: grammatically a
+Type names (`f32`, `u32x3`, …) are **not** reserved words: grammatically a
 type is just an identifier, and "is this identifier a real type" is a
 validator question.
 
@@ -97,7 +95,12 @@ float-literal   ::= digit+ "." digit* exponent? "f"?     e.g. 1.5, 1., 2.5e-3f
                   | digit+ exponent "f"?                 e.g. 1e-6
 exponent        ::= ("e" | "E") ("+" | "-")? digit+
 bool-literal    ::= "true" | "false"
+
+string-literal  ::= '"' (any character except '"')* '"'
 ```
+
+String literals are not values: they appear only as the resource key of a
+buffer declaration (§5) and in `#include` paths.
 
 ### Operators and punctuation
 
@@ -155,7 +158,7 @@ Notes:
 - There is no `#ifndef` or `#elif`. The include-guard idiom is:
   `#ifdef GUARD` / `#else` / `#define GUARD` … `#endif`.
 - Macros may appear anywhere a token sequence may, including kernel dims
-  (`kernel[TILE, TILE, 1]`) and array dims (`float[N * N] xs;`).
+  (`kernel[TILE, TILE, 1]`) and array dims (`f32[N * N] xs;`).
 
 ---
 
@@ -168,6 +171,7 @@ validator imposes declare-before-use.
 translation-unit    ::= global-declaration*
 
 global-declaration  ::= resource-decl
+                      | struct-decl
                       | shared-decl
                       | function-decl
                       | kernel-decl
@@ -180,7 +184,7 @@ global-declaration  ::= resource-decl
 
 A type is written as a single self-delimiting prefix: optional specifiers,
 a type name, then zero or more array dimensions. **Array dimensions attach
-to the type, not the variable name** (`float2[4] xs`, never `float2 xs[4]`).
+to the type, not the variable name** (`f32x2[4] xs`, never `f32x2 xs[4]`).
 
 ```
 type            ::= specifier* identifier array-dim*
@@ -191,14 +195,24 @@ array-dim       ::= "[" const-expression? "]"      empty brackets = unsized
 `const-expression` is an operation list (§6) that must be constant; *how*
 constant depends on context — see [Constness levels](#constness-levels).
 
-Built-in type names (a validator concern, not a grammar one):
+Built-in type names are a validator concern, not a grammar one. A type name
+is a primitive, optionally suffixed with a vector width and then a second
+matrix dimension:
 
 ```
-float  double  int  uint  bool 
-float2 float3 float4   double2 double3 double4   int2 int3 int4   uint2 uint3 uint4   bool2 bool3 bool4
-float2x2 float2x3 float2x4  float3x2 float3x3 float3x4  float4x2 float4x3 float4x4 
-double2x2 double2x3 double2x4  double3x2 double3x3 double3x4  double4x2 double4x3 double4x4 
+type-name       ::= primitive ( "x" vec-size ( "x" vec-size )? )?
+primitive       ::= "f16" | "f32" | "f64"
+                  | "u8" | "u16" | "u32" | "u64"
+                  | "i8" | "i16" | "i32" | "i64"
+                  | "bool"
+vec-size        ::= "2" | "3" | "4"
 ```
+
+So `f32` is a scalar, `f32x3` a 3-vector, `f32x4x4` a 4×4 matrix, `u32x2` a
+uint pair. Names declared by a `struct-decl` are type names too.
+
+The opaque types (`image2D`, `image2DArray`, `sampler`) are **not** written
+with this production and are legal only in a resource declaration (§5).
 
 ---
 
@@ -220,8 +234,14 @@ not grammatically. Currently defined:
 | Annotation                      | Legal on               | Meaning                          |
 |---------------------------------|------------------------|----------------------------------|
 | `specialization_constant`       | `const` global scalars | SPIR-V specialization constant; optional arg = explicit constant id |
+| `godot_vertex`                  | storage buffers        | buffer is a vertex-buffer view   |
+| `godot_index`                   | storage buffers        | buffer is an index-buffer view   |
+| `flag_indirect`                 | storage buffers        | buffer holds indirect dispatch/draw commands |
 
-Example: `const uint fft_size : specialization_constant = 256;`
+Example: `const u32 fft_size : specialization_constant = 256;`
+
+The three buffer annotations are mutually exclusive and illegal on a uniform
+buffer; see [Semantic rules](#kernels-resources-and-the-call-graph).
 
 ### Shared (workgroup) variables
 
@@ -266,28 +286,73 @@ GPU side follows declaration order.
 
 ### Resources
 
-```
-resource-decl   ::= buffer-decl | image-decl | uniform-decl
+Every resource is declared with the resource *key* it is bound by on the
+Godot side, and carries no explicit `layout(...)`: the memory layout follows
+from the kind of resource (storage blocks are `std430`, uniform blocks are
+`std140`), and image formats are written as a type argument.
 
-buffer-decl     ::= "layout" "(" buffer-format ")" "buffer" identifier
-                    "{" buffer-member* "}" identifier? ";"
-buffer-format   ::= "std140" | "std430" | "vertex" | "index"
+```
+resource-decl   ::= buffer-decl | image-decl | sampler-decl
+
+buffer-decl     ::= "uniform"? "buffer" "[" string-literal "]" identifier?
+                    annotation-list? "{" buffer-member* "}" ";"
 buffer-member   ::= type identifier ";"
 
-image-decl      ::= "layout" "(" texture-format ")" "uniform" image-type identifier ";"
-texture-format  ::= "rgba16f" | "rgba32f"
+image-decl      ::= "uniform" image-type "<" image-format ">" identifier ";"
 image-type      ::= "image2D" | "image2DArray"
+image-format    ::= "f16x4" | "f32x4"
 
-uniform-decl    ::= "uniform" type identifier ";"          (planned)
+sampler-decl    ::= "uniform" "sampler" identifier ";"
 ```
 
-- If the trailing identifier after a buffer's `}` is present, members are
-  accessed through it (`params.count`); otherwise members are accessed
-  directly by name (`data[i]`).
-- An **unsized** array member (`float[] xs;`) is only legal as the *last*
+- The string literal in brackets is the resource's **key**: the name the
+  host binds against, and the name the validator uses for duplicate
+  detection. It is independent of any identifier in the declaration, so two
+  files may use different instance names for one bound resource.
+- A leading `uniform` makes the block a uniform buffer (`std140`); without
+  it the block is a storage buffer (`std430`).
+- The optional identifier before the block is the **instance name**. If it
+  is present, members are accessed through it (`params.count`); otherwise
+  members are accessed directly by name (`data[i]`).
+- An **unsized** array member (`f32[] xs;`) is only legal as the *last*
   member of a buffer block (validator).
-- `vertex` / `index` layouts declare vertex- and index-buffer views;
-  their member rules are **(undecided)**.
+- `godot_vertex` / `godot_index` annotations declare vertex- and
+  index-buffer views; their member rules are **(undecided)** — the stress
+  suite (v05) assumes a block of loose per-vertex fields is legal, and the
+  sample shaders use a single unsized array of a struct type.
+- An image's format argument is spelled as the vector type of one texel, so
+  `image2DArray<f16x4>` is the old `layout(rgba16f) uniform image2DArray`.
+  Only the two four-channel float formats exist today.
+- A `sampler` is declared on its own and combined with an image at the use
+  site: `mySampler(myImage)[coords]`. **(undecided)** whether a sampler may
+  be constrained to one image type at its declaration — the AST carries an
+  optional image type for it, but no syntax is settled.
+
+Example:
+
+```
+uniform buffer["CameraBuffer"] cam {
+    f32x3 camera_pos;
+    f32 proj_scale;
+};
+
+buffer["VertexBuffer"] : godot_vertex {
+    Vertex[] vertices;
+};
+
+uniform image2DArray<f16x4> heightTexture;
+uniform sampler oceanSampler;
+```
+
+### Structs
+
+```
+struct-decl     ::= "struct" identifier "{" struct-member* "}" ";"
+struct-member   ::= type identifier ";"
+```
+
+A struct name becomes a type name usable anywhere a type is, including as a
+buffer member (`Vertex[] vertices;`).
 
 ---
 
@@ -376,7 +441,11 @@ once the corresponding check exists — by the validation pass.
 3. Type names are identifiers: using a type name as a value, or an unknown
    identifier as a type, is a validation error.
 4. Kernels, functions (per overload signature), and resources each occupy a
-   namespace; duplicate kernel names and duplicate resource names are errors.
+   namespace; duplicate kernel names and duplicate resource keys are errors.
+   A buffer's key, its instance name, and its members are three separate
+   things: an anonymous block's members join the global value namespace and
+   collide with globals of the same name, while a named block's members are
+   reachable only through the instance name.
 5. Declare-before-use in scopes, no ordering enforced globally. **(planned —
    need to figure out how to represent this when transpiling to GLSL)**.
 
@@ -394,7 +463,7 @@ once the corresponding check exists — by the validation pass.
 ### Types
 
 10. Expression types are synthesized bottom-up with GLSL conversion rules;
-    operator operand types must be compatible (no `float2 + float3`).
+    operator operand types must be compatible (no `f32x2 + f32x3`).
 11. Initializer and assignment types must match the declared type.
 12. `return` expressions must match the function's return type; non-void
     functions must return on every control path; `void` calls cannot be
@@ -432,10 +501,13 @@ Unsized dims (`[]`) are legal only as the final buffer member.
 17. `barrier()` and shared-memory access are only meaningful in kernel
     context (reached-from-kernel functions included) **(undecided: error or
     ignore in never-called functions)**.
+18. `godot_vertex`, `godot_index`, and `flag_indirect` are mutually
+    exclusive — a buffer may carry at most one — and none of them may appear
+    on a uniform buffer.
 
 ### Annotations
 
-18. Annotation names must be known; placement must be legal for that
+19. Annotation names must be known; placement must be legal for that
     annotation (e.g. `specialization_constant` only on `const` global
     scalars); argument counts and types must match.
 
@@ -445,5 +517,20 @@ Unsized dims (`[]`) are legal only as the final buffer member.
 
 Tracked here so the document can describe the *intended* language above.
 
-- Array constructor expressions (`float2[4]( ... )`) are unimplemented.
+- Array constructor expressions (`f32x2[4]( ... )`) are unimplemented.
 - The validator implements only a subset of §8 so far.
+- The resource rework of §5 is mid-flight. The parser still dispatches on
+  the legacy `layout(buffer-format) buffer name { … } inst;` and
+  `layout(texture-format) uniform image-type name;` forms, and reaches
+  resource parsing only from a leading `layout` or `uniform`, so the
+  `buffer["key"] …` head is not parsed yet. The legacy forms should be
+  removed once the new ones land.
+- Bare uniform variables (`uniform f32 scale;`) were part of an earlier
+  design and are gone: `UniformDef` no longer exists in the AST. A scalar
+  that used to be one belongs in a uniform buffer or a push constant.
+- Sampler declarations parse, but `_parse_sampler` currently expects an
+  image type where the name should be, so the `uniform sampler name;` form
+  in the sample shaders does not round-trip yet.
+- `struct`, `switch`/`case`, `while`, `break`, and `continue` have tokens
+  and AST nodes ahead of the sections above that still call them
+  **(undecided)**.

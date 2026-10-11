@@ -2,7 +2,7 @@
 // specialization_constant is only valid on const globals, not on functions.
 // Placement is validated semantically, not grammatically.
 
-layout(std430) buffer sinkBuf {
+buffer["sinkBuf"] {
     f32[] sink;
 };
 

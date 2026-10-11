@@ -1,7 +1,7 @@
 //! EXPECT: validation_error
 // Two kernels with the same name.
 
-layout(std430) buffer sinkBuf {
+buffer["sinkBuf"] {
     f32[] sink;
 };
 

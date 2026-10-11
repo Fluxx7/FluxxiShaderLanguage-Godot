@@ -8,12 +8,14 @@
 #include "godot_cpp/classes/rd_uniform.hpp"
 #include "godot_cpp/classes/rd_texture_format.hpp"
 #include "godot_cpp/classes/rd_texture_view.hpp"
+#include "godot_cpp/classes/rd_sampler_state.hpp"
 #include "godot_cpp/classes/texture2drd.hpp"
 #include "godot_cpp/variant/callable.hpp"
 #include "godot_cpp/classes/image.hpp"
 #include "godot_cpp/variant/typed_dictionary.hpp"
 
 #include "ast_defs.h"
+#include "api_helpers.h"
 
 struct VariableInfo {
     FSLType type;
@@ -43,17 +45,21 @@ struct BufferInfo {
     LocalVector<RenderingDevice::StorageBufferUsage> usage_flags;
 };
 
+struct SamplerInfo {
+    optional<TextureType> type;
+};
+
 enum ResourceType {
     RESTYPE_BUFFER,
     RESTYPE_TEXTURE,
-    RESTYPE_UNIFORM
+    RESTYPE_SAMPLER
 };
 
 struct ResourceInfo {
     uint32_t set;
     uint32_t binding;
     ResourceType resource_type;
-    sumtype<BufferInfo, TextureInfo, VariableInfo> type_info;
+    sumtype<BufferInfo, TextureInfo, SamplerInfo> type_info;
 };
 
 class FSLResource : public RefCounted {
@@ -81,9 +87,13 @@ protected:
     static void _bind_methods();
     uint64_t flag_long = 0;
     LocalVector<uint64_t> flags;
+    
 public:
+    virtual uint32_t get_size_bytes() = 0;
     FSLBuffer() = default;
 
+    void copy_to(Ref<FSLBuffer> dest, bool allow_different_size = true);
+    void copy_bytes(Ref<FSLBuffer> dest, uint32_t num_bytes, uint32_t offset_src = 0, uint32_t offset_dest = 0);
     void add_flag(uint64_t flag);
     void set_flags(uint64_t flags);
     void remove_flag(uint64_t flag);
@@ -104,6 +114,15 @@ public:
     void remove_flag(uint64_t flag);
     void set_mip_count(uint32_t _mip_count);
     uint32_t get_mip_count() { return texture_info.mip_count; }
+};
+
+class FSLSamplerType : public FSLResource {
+    GDCLASS(FSLSamplerType, FSLResource)
+private:
+protected:
+    SamplerInfo sampler_info;
+    static void _bind_methods();
+public:
 };
 
 /**

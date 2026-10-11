@@ -133,6 +133,7 @@ CodeBuilder::CodeInfo CodeBuilder::gen_operation(const Operation &operation, boo
             if (!is_first) {
                 operation_code.add(" ");
             }
+
             operation_code.add("%s(", to_original_type(func_call.name));
             bool is_first_arg = true;
             for (const auto& arg : func_call.args) {
@@ -325,6 +326,24 @@ CodeBuilder::CodeInfo CodeBuilder::gen_expression(const Expression &expression) 
                 insert_all_excluding(expr_refs, refs, while_decls);
             }
         },
+        [&](SwitchNode switch_node) {
+            expr_code.add("switch (");
+            HashSet<StringName> switch_decls;
+            {
+                auto [code, refs, decls] = gen_operation_list(switch_node.operand);
+                expr_code.add(code);
+                insert_all(expr_refs, refs);
+                switch_decls = std::move(decls);
+            }
+            expr_code.add(") ");
+            {
+                CodeBuilder::CodeInfo info;
+                info = gen_expression(switch_node.body);
+                auto& [code, refs, _] = info;
+                expr_code.add_line(code);
+                insert_all_excluding(expr_refs, refs, switch_decls);
+            }
+        },
         [&](ScopeNode subblock) {
             expr_code.add_line("{");
             expr_code.indent();
@@ -393,6 +412,17 @@ CodeBuilder::CodeInfo CodeBuilder::gen_expression(const Expression &expression) 
                 insert_all(expr_refs, refs);
             }
             expr_code.add_line(";");
+        },
+        [&](CaseLabel case_label) {
+            if (!case_label.case_val.has_value()) {
+                expr_code.add("default");
+            } else {
+                expr_code.add("case ");
+                auto [code, refs, _] = gen_operation_list(*case_label.case_val);
+                expr_code.add(" %s", code.get_output());
+                insert_all(expr_refs, refs);
+            }
+            expr_code.add_line(":");
         });
     return {expr_code, expr_refs, expr_vars};
 }
@@ -546,7 +576,11 @@ Pair<BufferInfo, String> CodeBuilder::gen_buffer(const String &buffer_name, cons
     buf_info.format = buffer.layout;
     String buffer_type = buffer.buftype == UNIFORM ? "uniform" : "buffer";
     String buffer_layout = buffer.layout == STD140 ? "std140" : "std430";
-    res_code += vformat("%s) %s restrict %s {\n", buffer_layout, buffer_type, buffer_name);
+    res_code += vformat(", %s) %s ", buffer_layout, buffer_type);
+    if (!buffer.annotations.has("unrestricted")) {
+        res_code += "restrict ";
+    }
+    res_code += vformat("%s {\n", buffer_name);
     uint32_t curr_offset = 0;
     for (const auto& [name, args] : buffer.annotations) {
         switch (is_valid_buffer_annotation(name)) {
@@ -558,6 +592,8 @@ Pair<BufferInfo, String> CodeBuilder::gen_buffer(const String &buffer_name, cons
                 break;
             case 3:
                 buf_info.usage_flags.push_back(RenderingDevice::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT);
+                break;
+            case 4:
                 break;
             default:
                 // shouldn't happen
@@ -605,7 +641,7 @@ Pair<ResourceInfo, String> CodeBuilder::gen_resource(const ResourceNode &resourc
     ResourceInfo res_info;
     res_info.set = set;
     res_info.binding = binding;
-    String resource_code = vformat("\nlayout(set = 0, binding = %d, ", binding);
+    String resource_code = vformat("\nlayout(set = 0, binding = %d", binding);
     match(resource.resource, 
         [&](const BufferDef &buffer)          { 
             auto [buf_info, res_code] = gen_buffer(resource.name, buffer);
@@ -617,11 +653,10 @@ Pair<ResourceInfo, String> CodeBuilder::gen_resource(const ResourceNode &resourc
             resource_code += res_code;
             res_info.type_info = tex_info;
         },
-        [&](const UniformDef &uniform)  {
-            VariableInfo var_info;
-            var_info.type = typeref_to_fslType(uniform.uniform_decl.type, STD430);
-            res_info.type_info = var_info;
-            resource_code += vformat(") uniform %s;", gen_var_decl(uniform.uniform_decl).code.get_output());
+        [&](const SamplerDef &sampler) { 
+            auto [sampler_info, res_code] = sampler_to_glsl(resource.name, sampler);
+            resource_code += res_code;
+            res_info.type_info = sampler_info;
         });
     return {res_info, resource_code};
 }
@@ -641,7 +676,7 @@ CodeBuilder::CodeBuilder(const fslAST &ast) {
                     }
                 },
                 [&](const TextureDef &texture) { },
-                [&](const UniformDef &uniform)  {});
+                [&](const SamplerDef &sampler) { });
         }
     }
 

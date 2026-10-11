@@ -1,7 +1,7 @@
 //! EXPECT: validation_error
 // Reads a variable that was never declared anywhere.
 
-layout(std430) buffer sinkBuf {
+buffer["sinkBuf"] {
     f32[] sink;
 };
 

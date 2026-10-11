@@ -6,7 +6,7 @@
 // for the stack to grow into. (Delete the while section if while is
 // deliberately out of scope.)
 
-layout(std430) buffer loopBuf {
+buffer["loopBuf"] {
     u32[] loop_out;
 };
 

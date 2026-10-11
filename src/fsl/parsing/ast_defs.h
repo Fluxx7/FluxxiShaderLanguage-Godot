@@ -32,6 +32,7 @@ struct ElseNode;
 struct ForNode;
 struct WhileNode;
 struct FunctionDecl;
+struct SwitchNode;
 
 typedef LocalVector<TokenTree> Statement;
 
@@ -90,13 +91,17 @@ struct ReturnExpression : FSLNode {
     OperationList return_val;
 };
 
+struct CaseLabel : FSLNode {
+    optional<OperationList> case_val;
+};
+
 struct StructDecl : FSLNode {
     StringName name;
     LocalVector<VariableDecl> fields;
     HashMap<StringName, Args> annotations;
 };
 
-typedef sumtype<OperationList, IfNode, ElseNode, ForNode, WhileNode, ScopeNode, FunctionDecl, ReturnExpression, StructDecl> Expression;
+typedef sumtype<OperationList, IfNode, ElseNode, ForNode, WhileNode, SwitchNode, ScopeNode, FunctionDecl, ReturnExpression, CaseLabel, StructDecl> Expression;
 
 struct ScopeNode : FSLNode {
     LocalVector<Expression> body;
@@ -130,7 +135,7 @@ struct WhileNode : FSLNode {
 
 struct SwitchNode : FSLNode {
     OperationList operand;
-    HashMap<String, ScopeNode> body;
+    ScopeNode body;
 };
 
 struct FunctionDecl : FSLNode {
@@ -139,6 +144,11 @@ struct FunctionDecl : FSLNode {
     LocalVector<VariableDecl> args;
     HashMap<StringName, Args> annotations;
     ScopeNode code;
+};
+
+struct SamplerDef {
+    optional<TextureType> type;
+    HashMap<StringName, Args> annotations;
 };
 
 struct TextureDef {
@@ -155,14 +165,9 @@ struct BufferDef {
     HashMap<StringName, Args> annotations;
 };
 
-struct UniformDef {
-    VariableDecl uniform_decl;
-    OperationList default_value;
-};
-
 struct ResourceNode : FSLNode {
     StringName name;
-    sumtype<UniformDef, BufferDef, TextureDef> resource;
+    sumtype<BufferDef, TextureDef, SamplerDef> resource;
 };
 
 struct KernelNode : FSLNode {
@@ -239,6 +244,9 @@ inline String typeref_to_string(const TypeRef &type_ref) {
                 output += "const";
                 break;
             case SPECIFIER_SHARED:
+                output += "shared";
+                break;
+            case SPECIFIER_PRECISE:
                 output += "shared";
                 break;
         }

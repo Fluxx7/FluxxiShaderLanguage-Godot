@@ -30,6 +30,8 @@ void ComputeKernel::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_texture_2d", "texture_name"), &ComputeKernel::get_texture_2d);
     ClassDB::bind_method(D_METHOD("get_texture_2d_array", "texture_name"), &ComputeKernel::get_texture_2d_array);
 
+    ClassDB::bind_method(D_METHOD("get_sampler_2d_array", "sampler_name"), &ComputeKernel::get_sampler_2d_array);
+
     ClassDB::bind_method(D_METHOD("get_resource", "resource_name"), &ComputeKernel::get_resource);
 
 
@@ -131,7 +133,16 @@ RID ComputeKernel::get_uniform_set_rid() {
 PackedByteArray ComputeKernel::push_constants_to_bytes(TypedDictionary<StringName, Variant> push_constants) {
     if (kernel_info.push_constants.size() > 0) {
         PackedByteArray shader_pc_bytes = {};
+        int offset = 0;
         for (const auto& [pc_name, pc_info] : kernel_info.push_constants) {
+            FSLLayout type_sizing = get_fsl_type_layout(pc_info.type, 0, STD430);
+            if (offset % type_sizing.alignment != 0) {
+                uint32_t align_size = type_sizing.alignment - (offset % type_sizing.alignment);
+                PackedByteArray align_bytes = {};
+                align_bytes.resize(align_size);
+                shader_pc_bytes.append_array(align_bytes);
+                offset += align_size;
+            }
             // TODO: Sizing?
             PackedByteArray pc_byte_array;
             if (push_constants.has(pc_name)) {
@@ -141,7 +152,7 @@ PackedByteArray ComputeKernel::push_constants_to_bytes(TypedDictionary<StringNam
                 WARN_PRINT(vformat("No push constant assigned for \"%s\", using default value of %s", pc_name, defval));
                 pc_byte_array = fsl_type_to_bytes(pc_info.type, defval);
             }
-            
+            offset += type_sizing.size;
             shader_pc_bytes.append_array(pc_byte_array);
         }
         return shader_pc_bytes;
@@ -183,8 +194,7 @@ void print_resource_info(const StringName& res_name, const ResourceInfo &res_inf
         [&](const TextureInfo &tex_info) {
             printvf("\t\t%s with format %s", textureType_to_string(tex_info.type), textureFormat_to_string(tex_info.format));
         },
-        [&](const VariableInfo &var_info)  {
-            print_line("\t\tHow the fuck");
+        [&](const SamplerInfo &sampler_info)  {
         });
 }
 
@@ -267,6 +277,10 @@ Ref<FSLTexture2D> ComputeKernel::get_texture_2d(const StringName &texture_name) 
 
 Ref<FSLTexture2DArray> ComputeKernel::get_texture_2d_array(const StringName &texture_name) {
 	return _get_resource_typed<FSLTexture2DArray>(texture_name);
+}
+
+Ref<FSLSampler2DArray> ComputeKernel::get_sampler_2d_array(const StringName &sampler_name) {
+	return _get_resource_typed<FSLSampler2DArray>(sampler_name);
 }
 
 // -- GENERIC --

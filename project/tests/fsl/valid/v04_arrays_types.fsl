@@ -8,7 +8,7 @@
 
 #define N 16
 
-layout(std430) buffer arrayBuf {
+buffer["arrayBuf"] {
     f32x4[N] header;
     f32x2[N / 2][2] pairs;
     f32[] tail;

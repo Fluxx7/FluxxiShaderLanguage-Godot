@@ -1,0 +1,38 @@
+#include "shared_resources.fsl"
+
+struct Vertex {
+	f32 x;
+	f32 y;
+	f32 z;
+};
+
+uniform sampler2DArray heightTexture;
+
+buffer["VertexInputBuffer"] : godot_vertex {
+	Vertex[] input_vertices;
+};
+
+buffer["IndirectIndexedDrawCommandBuffer"] indexed_draw_command_buffer : flag_indirect {
+	u32 index_count;
+	u32 instance_count;
+	u32 first_index;
+	i32 vertex_offset;
+	u32 first_instance;
+};
+
+buffer["VertexOutputBuffer"] : godot_vertex {
+	Vertex[] output_vertices;
+};
+
+kernel[32, 1, 1] oceanVertex(g_id : GlobalInvocationID) {
+	Vertex v_vert;
+	f32x3 vert = f32x3(v_vert.x, v_vert.y, v_vert.z);
+	f32x3 vertex_displacement = f32x3(0);
+	for (i32 cascade = 0; cascade < paramsBuffer.numCascades; cascade++) {
+		f32x2 coords = vert.xz / paramsBuffer.tileLengths[cascade];
+		f32x3 sample = heightTexture[cascade][coords[cascade]].xyz;
+		vertex_displacement += sample;
+	}
+	f32 dist_factor = clamp(exp(-(length(VERTEX.xz - CAMERA_POSITION_WORLD.xz) - cutoff_dist)*cutoff_strength), 0.05, 1.0);
+	// output_vertices = vertex_displacement * f32x3(1.0, dist_factor, 1.0);
+}

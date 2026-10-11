@@ -35,7 +35,7 @@ const f32 branch_val = 2.0;
 #undef LIMIT
 #define LIMIT 16
 
-layout(std430) buffer macroBuf {
+buffer["macroBuf"] {
     f32[TILE * TILE] scratch;
     f32[] rest;
 };

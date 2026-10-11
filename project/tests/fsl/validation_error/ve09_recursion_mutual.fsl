@@ -3,7 +3,7 @@
 // (ping also calls pong before pong is declared; if forward references are
 // rejected instead, that is still a correct validation error for this file.)
 
-layout(std430) buffer sinkBuf {
+buffer["sinkBuf"] {
     f32[] sink;
 };
 

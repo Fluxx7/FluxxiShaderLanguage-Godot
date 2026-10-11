@@ -45,7 +45,16 @@ repository and extend the alternation:
 scalars/vectors (`f32`, `u32x2`, `boolx3` — the widths the validator generates),
 `void`, and the opaque image/sampler types. The full opaque-type family from
 `src/fsl/fsl_defs.h` (`image1D`…`imageBuffer`, `sampler*`) is already in there,
-ahead of the lexer supporting more than `image2D`/`image2DArray`.
+ahead of the lexer supporting more than `image2D`/`image2DArray`. Bare
+`sampler` (no dimension suffix) is its own pattern, since that is how samplers
+are declared.
+
+**Change a resource form**: `resource-declaration` holds the two structural
+rules — `image2D<f32x4>` (the format type argument gets its own
+`punctuation.definition.typeparameters.*` brackets rather than reading as
+comparison operators) and `buffer["key"] instance`. A new image format needs
+nothing here: capture 3 just includes `#types`. `uniform` and `buffer` as bare
+words are in `keywords`, so a buffer head with no key still colors sensibly.
 
 **Add an annotation**: the `annotations` rule matches only *known* names after a
 `:` (`specialization_constant`, `godot_vertex`, `godot_index`, `flag_indirect`) —
@@ -137,7 +146,9 @@ Scopes currently used, and what themes typically do with them:
 | Scope | Used for | Typical theme color |
 |---|---|---|
 | `keyword.control.fsl` | `if` `for` `return` … | purple/pink |
-| `keyword.other.kernel.fsl` / `.layout.fsl` | `kernel`, `layout` | purple/pink |
+| `keyword.other.kernel.fsl` | `kernel` | purple/pink |
+| `string.quoted.double.key.fsl` | a buffer's `["key"]` | green/orange |
+| `variable.other.block.fsl` | a buffer's instance name | white/blue |
 | `keyword.control.directive.*` | `#include` `#define` `#ifdef` … | purple/blue |
 | `storage.type.fsl` (also `.matrix` / `.opaque`) | `f32` `u32x2` `f32x4x4` `void` `image2D` … | blue/teal |
 | `storage.type.struct.fsl` | the `struct` keyword | blue/purple |
@@ -152,7 +163,7 @@ Scopes currently used, and what themes typically do with them:
 | `support.variable.builtin.fsl` | `GlobalInvocationID` `WorkGroupID` … | red/orange |
 | `variable.parameter.fsl` | bound name in `id : GlobalInvocationID` | orange/italic |
 | `constant.numeric.*` | numbers | orange/green |
-| `constant.language.*` | `true` `false` `std430` `rgba32f` | orange |
+| `constant.language.*` | `true` `false` | orange |
 | `constant.other.macro.fsl` | ALL_CAPS identifiers (`PI`) | orange |
 | `comment.line.*` / `comment.block.*` | comments | gray/green |
 | `string.quoted.double.include.fsl` | `#include` paths | green/orange |
